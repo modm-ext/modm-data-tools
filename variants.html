@@ -165,7 +165,7 @@
   }
   details > summary::marker { color: var(--faint); }
   details > summary em { font-style: normal; color: var(--faint); font-weight: 400; font-size: 12px; }
-  details > div { padding: 0 12px 12px; }
+  details > div { padding: 0 12px 12px; max-height: 230px; overflow: auto; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip {
     font: 11px var(--font-mono); padding: 2px 6px; border-radius: 5px;
@@ -177,7 +177,10 @@
   .lines b { color: var(--ink); font-weight: 600; }
 
   /* Feature legend */
-  .legend { display: flex; flex-wrap: wrap; gap: 6px; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px; max-height: 128px; overflow: auto;
+    padding: 2px; border-radius: 9px;
+  }
   .feat {
     display: flex; align-items: center; gap: 7px; padding: 5px 9px; cursor: pointer;
     border: 1px solid var(--rule-strong); border-radius: 7px; background: var(--surface);
@@ -192,34 +195,56 @@
   .feat.core .swatch { background: var(--core-bg); border-color: var(--core-line); }
 
   /* Register map */
-  .map { display: grid; gap: 3px; }
-  .reg { display: grid; grid-template-columns: 78px minmax(96px, 168px) 1fr; gap: 8px; align-items: center; }
-  .reg.dim { opacity: 0.3; }
-  .reg .off { font: 12px var(--font-mono); color: var(--faint); font-variant-numeric: tabular-nums; }
-  .reg .rname { font: 500 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .reg .rname .alias { color: var(--faint); font-weight: 400; }
-  .reg.opt .off::after { content: "◆"; margin-left: 5px; color: hsl(var(--h) var(--feat-s) var(--feat-line-l)); }
-  .bits {
-    display: grid; height: 22px; border: 1px solid var(--rule-strong); border-radius: 4px; overflow: hidden;
-    background: repeating-linear-gradient(-45deg, transparent 0 3px, var(--hatch) 3px 4px);
+  .stage { display: grid; grid-template-columns: 1fr minmax(240px, 300px); gap: 10px; align-items: start; }
+  .canvas-wrap {
+    position: relative; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden;
+    background: var(--surface); height: min(70vh, 720px);
   }
-  .bit {
-    grid-row: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
-    font: 10px var(--font-mono); white-space: nowrap; padding: 0 2px; min-width: 0;
-    background: var(--core-bg); box-shadow: inset 0 0 0 1px var(--core-line); color: var(--ink);
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
+  canvas.dragging { cursor: grabbing; }
+  canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; max-width: 320px;
+    background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 7px;
+    padding: 5px 8px; display: grid; gap: 1px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
   }
-  .bit.opt { background: hsl(var(--h) var(--feat-s) var(--feat-bg-l));
-    box-shadow: inset 0 0 0 1px hsl(var(--h) var(--feat-s) var(--feat-line-l));
-    color: hsl(var(--h) var(--feat-s) var(--feat-ink-l)); }
-  .bit.faded { opacity: 0.22; }
-  .bit.hit { box-shadow: inset 0 0 0 2px var(--accent); }
-  .scale { display: grid; font: 9px var(--font-mono); color: var(--faint); margin-bottom: 1px; }
-  .scale span { grid-row: 1; text-align: center; }
-  .more { justify-self: start; padding: 6px 12px; border: 1px solid var(--rule-strong); border-radius: 7px;
-    background: var(--surface); color: inherit; font: 13px var(--font-sans); cursor: pointer; }
-  .more:hover { background: var(--hover); }
-  .note { color: var(--faint); font-size: 12px; }
-  a { color: var(--accent); }
+  .tip strong { font: 600 12px var(--font-mono); }
+  .tip span { color: var(--muted); font-size: 11px; }
+  .zoom { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; z-index: 4; }
+  .zoom button {
+    width: 28px; height: 28px; border: 1px solid var(--rule-strong); border-radius: 6px;
+    background: var(--surface); color: inherit; font: 15px var(--font-mono); cursor: pointer; line-height: 1;
+  }
+  .zoom button:hover { background: var(--hover); }
+  .hint {
+    position: absolute; left: 8px; bottom: 8px; z-index: 4; color: var(--faint);
+    font-size: 11px; background: var(--surface); border-radius: 6px; padding: 2px 7px;
+  }
+
+  /* Inspector */
+  .inspect {
+    border: 1px solid var(--rule); border-radius: 9px; background: var(--band);
+    padding: 10px 12px; display: grid; gap: 8px; align-content: start;
+    max-height: min(70vh, 720px); overflow: auto;
+  }
+  .inspect h3 { margin: 0; font: 600 14px var(--font-mono); overflow-wrap: anywhere; }
+  .inspect .sub { color: var(--muted); font: 12px var(--font-mono); }
+  .inspect p { margin: 0; font-size: 12px; color: var(--muted); }
+  .inspect .badge {
+    justify-self: start; font: 600 11px var(--font-mono); padding: 2px 7px; border-radius: 5px;
+    background: var(--core-bg); border: 1px solid var(--core-line);
+  }
+  .inspect .badge.opt {
+    background: hsl(var(--h) var(--feat-s) var(--feat-bg-l));
+    border-color: hsl(var(--h) var(--feat-s) var(--feat-line-l));
+    color: hsl(var(--h) var(--feat-s) var(--feat-ink-l));
+  }
+  .inspect dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+  .inspect dt { color: var(--faint); }
+  .inspect dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+  .inspect hr { border: 0; border-top: 1px solid var(--rule); margin: 2px 0; width: 100%; }
+
+  @media (max-width: 1000px) { .stage { grid-template-columns: 1fr; } .inspect { max-height: none; } }
 
   @media (max-width: 720px) {
     .shell { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 28vh) 1fr; }
@@ -275,8 +300,11 @@ const el = (tag, cls, text) => {
   return node;
 };
 const num = (value) => value.toLocaleString("en-US");
+const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
 // Golden angle keeps neighbouring features far apart in hue
 const hue = (index) => Math.round((index * 137.508 + 8) % 360);
+const hex = (value) => `0x${value.toString(16).padStart(3, "0")}`;
+const range = (position, width) => (width === 1 ? `${position}` : `${position + width - 1}:${position}`);
 
 function regex(pattern) {
   if (!pattern) return null;
@@ -351,7 +379,8 @@ function renderGroup() {
     tab.setAttribute("aria-current", String(index === state.variant));
     if (device && variant.devices.some((d) => device.test(data.devices[d]))) tab.classList.add("match");
     tab.append(el("b", null, `variant ${index}`));
-    tab.append(el("span", null, `${num(variant.instances)} inst · ${variant.devices.length} dev · ${variant.members.length} maps`));
+    tab.append(el("span", null,
+      `${num(variant.instances)} inst · ${variant.devices.length} dev · ${variant.members.length} maps`));
     tab.addEventListener("click", () => {
       state.variant = index;
       state.feature = null;
@@ -366,8 +395,7 @@ function renderGroup() {
 /* -------------------------------------------------------------- variants */
 
 function renderVariant() {
-  const data = state.data;
-  const variant = data.variants[state.variant];
+  const variant = state.data.variants[state.variant];
   const body = $("detail");
   body.textContent = "";
   if (!variant) return;
@@ -387,9 +415,9 @@ function renderVariant() {
   body.append(legend(variant));
   if (Object.keys(variant.conflicts).length) body.append(conflicts(variant));
   if (variant.renames.length) body.append(renames(variant));
-  body.append(devices(variant, data));
+  body.append(devices(variant, state.data));
   body.append(mapFilter());
-  body.append(registerMap(variant));
+  body.append(stage(variant));
 }
 
 function cards(entries) {
@@ -411,7 +439,7 @@ function legend(variant) {
   all.append(el("span", "swatch"));
   all.append(el("span", "num", "core"));
   all.append(el("span", "meta", "in every instance"));
-  all.addEventListener("click", () => { state.feature = null; renderVariant(); });
+  all.addEventListener("click", () => { state.feature = null; select(null); redraw(); renderLegend(); });
   wrap.append(all);
 
   variant.features.forEach((feature, index) => {
@@ -428,15 +456,23 @@ function legend(variant) {
       `implemented by ${feature.instances} instances on ${feature.devices.length} devices`;
     button.addEventListener("click", () => {
       state.feature = state.feature === index ? null : index;
-      renderVariant();
+      select(state.feature === null ? null : {kind: "feature", index});
+      redraw();
+      renderLegend();
     });
     wrap.append(button);
   });
+  wrap.id = "legend";
   return wrap;
 }
 
-function details(summaryText, count, build) {
+function renderLegend() {
+  $("legend").replaceWith(legend(state.data.variants[state.variant]));
+}
+
+function details(summaryText, count, build, open = false) {
   const box = el("details");
+  box.open = open;
   const summary = el("summary");
   summary.append(document.createTextNode(summaryText));
   summary.append(el("em", null, count));
@@ -476,22 +512,23 @@ function renames(variant) {
   });
 }
 
-function devices(variant, data) {
+function deviceChips(names) {
   const pattern = regex(state.device);
+  const chips = el("div", "chips");
+  for (const name of names) {
+    const chip = el("span", "chip", name);
+    if (pattern && pattern.test(name)) chip.classList.add("on");
+    chips.append(chip);
+  }
+  return chips;
+}
+
+function devices(variant, data) {
   return details("Devices and instances", `${variant.devices.length} devices`, (inner) => {
-    const names = el("div", "chips");
-    for (const name of variant.names) names.append(el("span", "chip", name));
-    inner.append(names);
-    inner.append(el("p", "note", ""));
-    const chips = el("div", "chips");
-    for (const index of variant.devices) {
-      const name = data.devices[index];
-      const chip = el("span", "chip", name);
-      if (pattern && pattern.test(name)) chip.classList.add("on");
-      chips.append(chip);
-    }
-    inner.append(chips);
-  });
+    inner.append(deviceChips(variant.names));
+    inner.append(el("p", "note", "Implemented by these devices:"));
+    inner.append(deviceChips(variant.devices.map((index) => data.devices[index])));
+  }, true);
 }
 
 function mapFilter() {
@@ -505,9 +542,8 @@ function mapFilter() {
   input.spellcheck = false;
   input.addEventListener("input", () => {
     state.map = input.value;
-    const map = $("detail").querySelector(".map");
-    if (map) map.replaceWith(registerMap(state.data.variants[state.variant]));
     input.classList.toggle("bad", regex(state.map) === undefined);
+    redraw();
   });
   wrap.append(input);
   return wrap;
@@ -515,103 +551,574 @@ function mapFilter() {
 
 /* ---------------------------------------------------------- register map */
 
-const LIMIT = 250;
+const GUTTER = 150;            // fixed left column with the register names
+const ROW_RATIO = 4;           // a bit is this many times taller than it is wide
+const K_MIN = 0.6, K_MAX = 90; // pixels per bit
+const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+const FONT_SANS = '"IBM Plex Sans", system-ui, -apple-system, sans-serif';
 
-function scaleRow(bits) {
-  const row = el("div", "reg");
-  row.append(el("span", "off"));
-  row.append(el("span", "rname"));
-  const scale = el("div", "scale");
-  scale.style.gridTemplateColumns = `repeat(${bits / 4}, 1fr)`;
-  for (let bit = bits - 1; bit >= 0; bit -= 4) scale.append(el("span", null, String(bit)));
-  row.append(scale);
-  return row;
+const map = {
+  variant: null, layout: null, k: 8, ox: GUTTER, oy: 0, width: 0, height: 0, dpr: 1,
+  hover: null, selected: null, colors: null, hatch: null, frame: 0, canvas: null, ctx: null,
+};
+const widths = new Map();
+
+function stage(variant) {
+  const wrap = el("div", "stage");
+  const holder = el("div", "canvas-wrap");
+  const canvas = el("canvas");
+  canvas.tabIndex = 0;
+  canvas.setAttribute("aria-label", "Zoomable register map, drag to pan and ctrl+scroll to zoom");
+  holder.append(canvas);
+  const tip = el("div", "tip");
+  tip.id = "tip";
+  tip.hidden = true;
+  holder.append(tip);
+  const zoom = el("div", "zoom");
+  for (const [label, factor] of [["−", 1 / 1.6], ["+", 1.6]]) {
+    const button = el("button", null, label);
+    button.type = "button";
+    button.title = label === "+" ? "Zoom in" : "Zoom out";
+    button.addEventListener("click", () => zoomAt(GUTTER + (map.width - GUTTER) / 2, map.height / 2, factor));
+    zoom.append(button);
+  }
+  holder.append(zoom);
+  holder.append(el("span", "hint", "drag to pan · ctrl+scroll to zoom · click for details"));
+  wrap.append(holder);
+
+  const inspect = el("div", "inspect");
+  inspect.id = "inspect";
+  wrap.append(inspect);
+
+  map.variant = variant;
+  map.canvas = canvas;
+  map.ctx = canvas.getContext("2d");
+  map.layout = buildLayout(variant);
+  map.hover = null;
+  map.selected = null;
+  attach(canvas);
+  requestAnimationFrame(() => { resize(); fitView(); renderInspector(); });
+  return wrap;
 }
 
-function registerMap(variant, all = false) {
-  const map = el("div", "map");
-  const pattern = regex(state.map);
-  map.append(scaleRow(32));
-  let shown = 0, hidden = 0;
-  for (const register of variant.registers) {
-    const names = register.names.join(" = ");
-    const hit = pattern && (pattern.test(names) || register.fields.some((f) => f.names.some((n) => pattern.test(n))));
-    if (pattern && !hit) { hidden++; continue; }
-    if (!all && shown >= LIMIT) { hidden++; continue; }
-    shown++;
-    map.append(registerRow(variant, register, pattern));
-  }
-  if (hidden) {
-    const note = el("p", "note", `${num(hidden)} more registers not shown.`);
-    if (!pattern) {
-      const button = el("button", "more", `Show all ${num(variant.registers.length)} registers`);
-      button.type = "button";
-      button.addEventListener("click", () => map.replaceWith(registerMap(variant, true)));
-      map.append(button);
-    } else {
-      map.append(note);
-    }
-  }
-  if (!shown) map.append(el("p", "empty", "No register matches."));
-  return map;
-}
-
-function registerRow(variant, register, pattern) {
-  const row = el("div", "reg");
-  if (register.feature >= 0) {
-    row.classList.add("opt");
-    row.style.setProperty("--h", hue(register.feature));
-  }
-  if (state.feature !== null && register.feature !== state.feature &&
-      !register.fields.some((f) => f.feature === state.feature)) {
-    row.classList.add("dim");
-  }
-
-  const offset = el("span", "off", `0x${register.offset.toString(16).padStart(3, "0")}`);
-  if (register.dim) offset.textContent += `[${register.dim}]`;
-  row.append(offset);
-
-  const name = el("span", "rname");
-  name.append(document.createTextNode(register.names[0] || "?"));
-  if (register.names.length > 1) name.append(el("span", "alias", ` = ${register.names.slice(1).join(" = ")}`));
-  name.title = [register.names.join(" = "), register.description].filter(Boolean).join(" — ");
-  row.append(name);
-
-  row.append(bitStrip(variant, register, pattern));
-  return row;
-}
-
-function bitStrip(variant, register, pattern) {
-  const bits = register.width * 8;
-  const strip = el("div", "bits");
-  strip.style.gridTemplateColumns = `repeat(${bits}, 1fr)`;
-  // Alternates of the same register overlap, so pack them into extra rows
+function buildLayout(variant) {
   const rows = [];
-  for (const field of [...register.fields].sort((a, b) => b.position - a.position || b.width - a.width)) {
-    const start = bits - (field.position + field.width);
-    let index = rows.findIndex((row) => row.every(([s, w]) => start >= s + w || start + field.width <= s));
-    if (index < 0) index = rows.push([]) - 1;
-    rows[index].push([start, field.width]);
-
-    // A label only fits into a cell that is a few bits wide, the rest is in the tooltip
-    const cell = el("div", "bit", field.width >= 3 ? field.names[0] || "" : "");
-    cell.style.gridColumn = `${start + 1} / span ${field.width}`;
-    cell.style.gridRow = String(index + 1);
-    if (field.feature >= 0) {
-      cell.classList.add("opt");
-      cell.style.setProperty("--h", hue(field.feature));
+  let y = 0;
+  for (const register of variant.registers) {
+    const bits = register.width * 8;
+    const lanes = [];
+    const items = [];
+    // Alternates of the same register overlap, so pack them into extra lanes
+    for (const field of [...register.fields].sort((a, b) => b.position - a.position || b.width - a.width)) {
+      const start = bits - (field.position + field.width);
+      let lane = lanes.findIndex((used) => used.every(([s, w]) => start >= s + w || start + field.width <= s));
+      if (lane < 0) lane = lanes.push([]) - 1;
+      lanes[lane].push([start, field.width]);
+      items.push({field, lane, start});
     }
-    if (state.feature !== null && field.feature !== state.feature) cell.classList.add("faded");
-    if (pattern && field.names.some((n) => pattern.test(n))) cell.classList.add("hit");
-    const range = field.width === 1 ? `${field.position}` : `${field.position + field.width - 1}:${field.position}`;
-    const where = field.feature < 0
-      ? "core: every instance of this variant"
-      : `feature ${field.feature}: ${variant.features[field.feature].devices.length} devices`;
-    cell.title = [`${field.names.join(" = ")} [${range}]`, field.description, where].filter(Boolean).join("\n");
-    strip.append(cell);
+    const height = Math.max(1, lanes.length);
+    rows.push({register, bits, y, height, items});
+    y += height;
   }
-  strip.style.gridAutoRows = "21px";
-  return strip;
+  return {rows, rowCount: Math.max(y, 1)};
+}
+
+function readColors() {
+  const style = getComputedStyle(document.documentElement);
+  const value = (name) => style.getPropertyValue(name).trim();
+  map.colors = {
+    surface: value("--surface"), band: value("--band"), ink: value("--ink"),
+    muted: value("--muted"), faint: value("--faint"), rule: value("--rule"),
+    ruleStrong: value("--rule-strong"), accent: value("--accent"), mark: value("--mark"),
+    coreBg: value("--core-bg"), coreLine: value("--core-line"),
+    s: value("--feat-s"), lineL: value("--feat-line-l"), bgL: value("--feat-bg-l"), inkL: value("--feat-ink-l"),
+  };
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = 6;
+  const ctx = tile.getContext("2d");
+  ctx.strokeStyle = value("--hatch");
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-1, 5); ctx.lineTo(5, -1);
+  ctx.moveTo(1, 7); ctx.lineTo(7, 1);
+  ctx.stroke();
+  map.hatch = map.ctx.createPattern(tile, "repeat");
+}
+
+const featureFill = (index) => `hsl(${hue(index)} ${map.colors.s} ${map.colors.bgL})`;
+const featureLine = (index) => `hsl(${hue(index)} ${map.colors.s} ${map.colors.lineL})`;
+const featureInk = (index) => `hsl(${hue(index)} ${map.colors.s} ${map.colors.inkL})`;
+
+const rowHeight = () => map.k * ROW_RATIO;
+const sx = (bit) => map.ox + bit * map.k;
+const sy = (row) => map.oy + row * rowHeight();
+
+function resize() {
+  const canvas = map.canvas;
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  map.dpr = window.devicePixelRatio || 1;
+  map.width = rect.width;
+  map.height = rect.height;
+  canvas.width = Math.round(rect.width * map.dpr);
+  canvas.height = Math.round(rect.height * map.dpr);
+  readColors();
+  draw();
+}
+
+function minZoom() {
+  return Math.max(K_MIN, Math.min((map.width - GUTTER - 24) / 32, 4));
+}
+
+function fitView() {
+  map.k = clamp((map.width - GUTTER - 24) / 32, K_MIN, 24);
+  map.ox = GUTTER + 12;
+  map.oy = 10;
+  clampView();
+  draw();
+}
+
+function clampView() {
+  const width = map.width - GUTTER, height = map.height;
+  const contentW = 32 * map.k, contentH = map.layout.rowCount * rowHeight();
+  map.ox = clamp(map.ox, GUTTER + Math.min(12, width - contentW), GUTTER + Math.max(12, width - contentW));
+  map.oy = clamp(map.oy, Math.min(10, height - contentH - 10), 10);
+}
+
+function zoomAt(px, py, factor) {
+  const k = clamp(map.k * factor, minZoom(), K_MAX), f = k / map.k;
+  map.ox = px - (px - map.ox) * f;
+  map.oy = py - (py - map.oy) * f;
+  map.k = k;
+  clampView();
+  draw();
+}
+
+function redraw() { draw(); }
+
+function draw() {
+  if (!map.frame) map.frame = requestAnimationFrame(() => { map.frame = 0; paint(); });
+}
+
+/* ------------------------------------------------------------------ text */
+
+function textWidth(ctx, text) {
+  const key = `${ctx.font}|${text}`;
+  let width = widths.get(key);
+  if (width === undefined) { width = ctx.measureText(text).width; widths.set(key, width); }
+  return width;
+}
+
+function fitText(ctx, text, x, y, maxWidth) {
+  if (textWidth(ctx, text) > maxWidth) return false;
+  ctx.fillText(text, x, y);
+  return true;
+}
+
+function fitTextRotated(ctx, text, cx, cy, maxLength) {
+  if (textWidth(ctx, text) > maxLength) return false;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+  return true;
+}
+
+/* --------------------------------------------------------------- drawing */
+
+function paint() {
+  const ctx = map.ctx, C = map.colors, W = map.width, H = map.height;
+  if (!ctx || !C || !W) return;
+  const L = map.layout, variant = map.variant;
+  const pattern = regex(state.map);
+  const rowH = rowHeight();
+
+  ctx.setTransform(map.dpr, 0, 0, map.dpr, 0, 0);
+  ctx.fillStyle = C.surface;
+  ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = "middle";
+
+  const first = Math.max(0, Math.floor((-map.oy) / rowH) - 2);
+  const last = Math.min(L.rowCount, Math.ceil((H - map.oy) / rowH) + 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(GUTTER, 0, W - GUTTER, H);
+  ctx.clip();
+  for (const row of L.rows) {
+    if (row.y + row.height < first || row.y > last) continue;
+    drawRegister(ctx, row, pattern);
+  }
+  if (map.hover && map.hover !== map.selected) outline(ctx, map.hover, C.accent, 1.5);
+  if (map.selected && map.selected.kind !== "feature") outline(ctx, map.selected, C.ink, 2);
+  ctx.restore();
+
+  // Gutter with the register names
+  ctx.fillStyle = C.surface;
+  ctx.fillRect(0, 0, GUTTER, H);
+  ctx.fillStyle = C.rule;
+  ctx.fillRect(GUTTER - 1, 0, 1, H);
+  for (const row of L.rows) {
+    if (row.y + row.height < first || row.y > last) continue;
+    const top = sy(row.y), height = row.height * rowH;
+    if (height < 9 || top > H || top + height < 0) continue;
+    const y = top + Math.min(height, 20) / 2;
+    const dimmed = pattern && !matches(pattern, row);
+    ctx.font = `10.5px ${FONT_MONO}`;
+    ctx.textAlign = "left";
+    ctx.fillStyle = dimmed ? C.faint : C.muted;
+    ctx.fillText(hex(row.register.offset), 10, y);
+    ctx.font = `600 11.5px ${FONT_SANS}`;
+    ctx.fillStyle = dimmed ? C.faint : row.register.feature < 0 ? C.ink : featureLine(row.register.feature);
+    let name = row.register.names[0] || "?";
+    while (name.length > 3 && textWidth(ctx, name) > GUTTER - 68) name = name.slice(0, -2) + "…";
+    ctx.fillText(name, 58, y);
+  }
+}
+
+function matches(pattern, row) {
+  return pattern.test(row.register.names.join(" ")) ||
+    row.items.some(({field}) => field.names.some((n) => pattern.test(n)));
+}
+
+function drawRegister(ctx, row, pattern) {
+  const C = map.colors, rowH = rowHeight();
+  const x = sx(32 - row.bits), y = sy(row.y);
+  const w = row.bits * map.k, h = row.height * rowH;
+  if (y > map.height || y + h < 0) return;
+  const dimmed = pattern && !matches(pattern, row);
+  ctx.globalAlpha = dimmed ? 0.25 : 1;
+
+  // The register itself, with the bits that no field covers left hatched
+  ctx.fillStyle = C.band;
+  ctx.fillRect(x, y, w, h);
+  if (map.hatch && h >= 3) { ctx.fillStyle = map.hatch; ctx.fillRect(x, y, w, h); }
+
+  const showText = rowH >= 13;
+  for (const {field, lane, start} of row.items) {
+    const fx = sx(32 - row.bits + start), fy = y + lane * rowH;
+    const fw = field.width * map.k, fh = rowH;
+    const hit = pattern && field.names.some((n) => pattern.test(n));
+    ctx.fillStyle = hit ? C.mark : field.feature < 0 ? C.coreBg : featureFill(field.feature);
+    ctx.fillRect(fx, fy, fw, fh);
+    if (state.feature !== null && field.feature !== state.feature) {
+      ctx.globalAlpha = dimmed ? 0.12 : 0.28;
+    }
+    ctx.strokeStyle = field.feature < 0 ? C.coreLine : featureLine(field.feature);
+    ctx.lineWidth = 1;
+    if (fw >= 2 && fh >= 2) ctx.strokeRect(fx + 0.5, fy + 0.5, fw - 1, fh - 1);
+    if (showText) {
+      ctx.fillStyle = field.feature < 0 ? C.ink : featureInk(field.feature);
+      const name = field.names[0] || "";
+      ctx.textAlign = "center";
+      const size = clamp(Math.min(fw, fh) * 0.62, 7.5, 12);
+      ctx.font = `${size.toFixed(1)}px ${FONT_MONO}`;
+      // Bit fields are taller than they are wide, so their names read vertically
+      if (fh >= fw) {
+        if (fw >= 8 && !fitTextRotated(ctx, name, fx + fw / 2 + size / 3, fy + fh / 2, fh - 6)) {
+          fitText(ctx, name, fx + fw / 2, fy + fh / 2, fw - 4);
+        }
+      } else if (!fitText(ctx, name, fx + fw / 2, fy + fh / 2, fw - 5)) {
+        if (fw >= 8) fitTextRotated(ctx, name, fx + fw / 2 + size / 3, fy + fh / 2, fh - 6);
+      }
+    }
+    ctx.globalAlpha = dimmed ? 0.25 : 1;
+  }
+
+  ctx.strokeStyle = row.register.feature < 0 ? C.ruleStrong : featureLine(row.register.feature);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+
+  // Bit numbers below the register once there is room for them
+  if (map.k >= 15 && rowH >= 56) {
+    ctx.font = `9.5px ${FONT_MONO}`;
+    ctx.fillStyle = C.faint;
+    ctx.textAlign = "center";
+    ctx.globalAlpha = dimmed ? 0.25 : 0.8;
+    for (let bit = 0; bit < row.bits; bit++) {
+      ctx.fillText(String(bit), sx(32 - 1 - bit) + map.k / 2, y + h - 7);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function rectOf(target) {
+  const rowH = rowHeight();
+  const row = target.row;
+  if (target.kind === "register") {
+    return [sx(32 - row.bits), sy(row.y), row.bits * map.k, row.height * rowH];
+  }
+  return [sx(32 - row.bits + target.item.start), sy(row.y) + target.item.lane * rowH,
+    target.item.field.width * map.k, rowH];
+}
+
+function outline(ctx, target, color, width) {
+  const [x, y, w, h] = rectOf(target);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.strokeRect(x, y, w, h);
+}
+
+/* ------------------------------------------------------------ hit testing */
+
+function hitTest(px, py) {
+  if (px < GUTTER) return null;
+  const L = map.layout, rowH = rowHeight();
+  const rowIndex = (py - map.oy) / rowH;
+  const row = L.rows.find((r) => rowIndex >= r.y && rowIndex < r.y + r.height);
+  if (!row) return null;
+  const bit = (px - map.ox) / map.k;
+  if (bit < 32 - row.bits || bit > 32) return null;
+  const start = bit - (32 - row.bits);
+  const lane = Math.floor(rowIndex - row.y);
+  const item = row.items.find((i) => i.lane === lane && start >= i.start && start < i.start + i.field.width);
+  return item ? {kind: "field", row, item} : {kind: "register", row};
+}
+
+function describe(target) {
+  if (target.kind === "register") {
+    const r = target.row.register;
+    return `${hex(r.offset)} · ${r.width * 8} bit · ${r.fields.length} fields`;
+  }
+  const f = target.item.field;
+  return `[${range(f.position, f.width)}] · ${f.feature < 0 ? "core" : `feature ${f.feature}`}`;
+}
+
+function label(target) {
+  return target.kind === "register"
+    ? target.row.register.names.join(" = ")
+    : target.item.field.names.join(" = ");
+}
+
+function select(target) {
+  map.selected = target;
+  renderInspector();
+  draw();
+}
+
+/* ------------------------------------------------------------- inspector */
+
+function renderInspector() {
+  const box = $("inspect");
+  if (!box) return;
+  box.textContent = "";
+  const variant = map.variant, data = state.data;
+  const target = map.selected;
+
+  if (target && target.kind === "feature") {
+    const feature = variant.features[target.index];
+    box.append(el("h3", null, `Feature ${target.index}`));
+    const badge = el("span", "badge opt", "optional");
+    badge.style.setProperty("--h", hue(target.index));
+    box.append(badge);
+    box.append(el("p", null,
+      `${feature.elements} elements in ${feature.registers} registers that appear in exactly the same instances, ` +
+      `so they are enabled and disabled together.`));
+    box.append(facts([
+      ["register maps", `${feature.members.length} of ${variant.members.length}`],
+      ["instances", num(feature.instances)],
+      ["devices", num(feature.devices.length)],
+    ]));
+    box.append(el("hr"));
+    box.append(el("p", null, "Implemented by:"));
+    box.append(deviceChips(feature.devices.map((index) => data.devices[index])));
+    return;
+  }
+
+  if (!target) {
+    box.append(el("h3", null, `${data.name} variant ${state.variant}`));
+    box.append(el("p", null, "Click a register or a bit field in the map to see what it is and which devices have it."));
+    box.append(facts([
+      ["instances", num(variant.instances)],
+      ["devices", num(variant.devices.length)],
+      ["register maps", num(variant.members.length)],
+      ["registers", num(variant.registers.length)],
+      ["features", num(variant.features.length)],
+    ]));
+    box.append(el("hr"));
+    box.append(el("p", null, "Instance names:"));
+    box.append(deviceChips(variant.names));
+    return;
+  }
+
+  const isField = target.kind === "field";
+  const node = isField ? target.item.field : target.row.register;
+  const feature = node.feature;
+  box.append(el("h3", null, node.names[0] || "?"));
+  box.append(el("div", "sub",
+    isField
+      ? `${target.row.register.names[0]} [${range(node.position, node.width)}]`
+      : `${hex(node.offset)} · ${node.width * 8} bit`));
+  const badge = el("span", `badge${feature < 0 ? "" : " opt"}`, feature < 0 ? "core" : `feature ${feature}`);
+  if (feature >= 0) badge.style.setProperty("--h", hue(feature));
+  box.append(badge);
+  if (node.description) box.append(el("p", null, node.description));
+
+  const facts_ = [];
+  if (node.names.length > 1) facts_.push(["also named", node.names.slice(1).join(", ")]);
+  if (isField) {
+    facts_.push(["bits", range(node.position, node.width)]);
+    facts_.push(["width", `${node.width} bit`]);
+    facts_.push(["register", target.row.register.names.join(" = ")]);
+    facts_.push(["offset", hex(target.row.register.offset)]);
+  } else {
+    facts_.push(["offset", hex(node.offset)]);
+    facts_.push(["size", `${node.width * 8} bit`]);
+    if (node.dim) facts_.push(["array", `${node.dim} entries`]);
+    facts_.push(["fields", String(node.fields.length)]);
+  }
+  box.append(facts(facts_));
+
+  box.append(el("hr"));
+  const devicesOf = feature < 0 ? variant.devices : variant.features[feature].devices;
+  const maps = feature < 0 ? variant.members.length : variant.features[feature].members.length;
+  box.append(el("p", null,
+    feature < 0
+      ? `Part of the core: present in all ${maps} register maps of this variant, on ${devicesOf.length} devices.`
+      : `Optional: present in ${maps} of ${variant.members.length} register maps, on ${devicesOf.length} devices.`));
+  box.append(deviceChips(devicesOf.map((index) => data.devices[index])));
+}
+
+function facts(entries) {
+  const list = el("dl");
+  for (const [key, value] of entries) {
+    list.append(el("dt", null, key));
+    list.append(el("dd", null, value));
+  }
+  return list;
+}
+
+/* ---------------------------------------------------------- interactions */
+
+function attach(canvas) {
+  const pointers = new Map();
+  let drag = null, pinch = null;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    canvas.focus({preventScroll: true});
+    canvas.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, {x: event.offsetX, y: event.offsetY});
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = {distance: Math.hypot(a.x - b.x, a.y - b.y)};
+      drag = null;
+    } else {
+      drag = {x: event.offsetX, y: event.offsetY, ox: map.ox, oy: map.oy, moved: false};
+    }
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (pointers.has(event.pointerId)) pointers.set(event.pointerId, {x: event.offsetX, y: event.offsetY});
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.distance > 0) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, distance / pinch.distance);
+      pinch.distance = distance;
+      return;
+    }
+    if (drag && pointers.has(event.pointerId)) {
+      const dx = event.offsetX - drag.x, dy = event.offsetY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 3) {
+        drag.moved = true;
+        canvas.classList.add("dragging");
+        $("tip").hidden = true;
+      }
+      if (drag.moved) {
+        map.ox = drag.ox + dx;
+        map.oy = drag.oy + dy;
+        clampView();
+        draw();
+      }
+      return;
+    }
+    const hit = hitTest(event.offsetX, event.offsetY);
+    if (!same(hit, map.hover)) { map.hover = hit; draw(); }
+    const tip = $("tip");
+    if (!hit) { tip.hidden = true; return; }
+    tip.textContent = "";
+    tip.append(el("strong", null, label(hit)));
+    tip.append(el("span", null, describe(hit)));
+    tip.hidden = false;
+    tip.style.left = `${Math.min(event.offsetX + 14, map.width - tip.offsetWidth - 8)}px`;
+    tip.style.top = `${event.offsetY + 18 + tip.offsetHeight > map.height
+      ? event.offsetY - tip.offsetHeight - 10 : event.offsetY + 18}px`;
+  });
+
+  const end = (event) => {
+    const wasClick = drag && !drag.moved && pointers.size === 1 && event.type === "pointerup";
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
+    canvas.classList.remove("dragging");
+    if (wasClick) select(hitTest(event.offsetX, event.offsetY));
+    drag = null;
+  };
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", () => {
+    if (drag) return;
+    $("tip").hidden = true;
+    if (map.hover) { map.hover = null; draw(); }
+  });
+
+  canvas.addEventListener("dblclick", (event) => {
+    const hit = hitTest(event.offsetX, event.offsetY);
+    if (hit) { select(hit); zoomTo(hit); } else { zoomAt(event.offsetX, event.offsetY, 2); }
+  });
+
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? map.height : 1;
+    if (event.ctrlKey || event.metaKey) {
+      zoomAt(event.offsetX, event.offsetY, Math.exp(-event.deltaY * scale * 0.0025));
+    } else {
+      map.ox -= (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * scale;
+      map.oy -= (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * scale;
+      clampView();
+      draw();
+    }
+  }, {passive: false});
+
+  canvas.addEventListener("keydown", (event) => {
+    const cx = GUTTER + (map.width - GUTTER) / 2, cy = map.height / 2;
+    switch (event.key) {
+      case "ArrowUp": map.oy += 80; break;
+      case "ArrowDown": map.oy -= 80; break;
+      case "ArrowLeft": map.ox += 80; break;
+      case "ArrowRight": map.ox -= 80; break;
+      case "PageUp": map.oy += map.height * 0.9; break;
+      case "PageDown": map.oy -= map.height * 0.9; break;
+      case "+": case "=": zoomAt(cx, cy, 1.5); break;
+      case "-": case "_": zoomAt(cx, cy, 1 / 1.5); break;
+      case "0": fitView(); return;
+      case "Escape": select(null); return;
+      default: return;
+    }
+    event.preventDefault();
+    clampView();
+    draw();
+  });
+
+  new ResizeObserver(() => resize()).observe(canvas);
+}
+
+function same(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind || a.row !== b.row) return false;
+  return a.kind === "register" || a.item === b.item;
+}
+
+function zoomTo(target) {
+  const width = target.kind === "field" ? target.item.field.width : target.row.bits;
+  const k = clamp(((map.width - GUTTER) * 0.7) / width, minZoom(), K_MAX);
+  const bit = target.kind === "field"
+    ? 32 - target.row.bits + target.item.start + width / 2 : 32 - target.row.bits / 2;
+  const row = target.row.y + (target.kind === "field" ? target.item.lane + 0.5 : target.row.height / 2);
+  map.k = k;
+  map.ox = GUTTER + (map.width - GUTTER) / 2 - bit * k;
+  map.oy = map.height / 2 - row * rowHeight();
+  clampView();
+  draw();
 }
 
 /* ----------------------------------------------------------------- setup */
@@ -624,6 +1131,7 @@ $("device").addEventListener("input", (event) => {
   state.device = event.target.value;
   if (state.data) renderGroup();
 });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(); });
 
 async function start() {
   try {
