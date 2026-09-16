@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peripheral Variant Explorer</title>
+<meta name="description" content="How many different silicon implementations of each STM32 peripheral exist: the register maps of every peripheral instance of every device merged into a common core and its optional features.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #F3F5F4;
+    --surface: #FFFFFF;
+    --band: #F8FAF9;
+    --ink: #16201C;
+    --muted: #5B6863;
+    --faint: #85918C;
+    --rule: #DDE3E0;
+    --rule-strong: #C3CCC8;
+    --accent: #1C6B56;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #E2EFEA;
+    --hover: #EEF4F1;
+    --mark: #FBE3A0;
+    --error: #B42318;
+    --hatch: #CDD6D2;
+    --core-bg: #E7ECEA;
+    --core-line: #8A9993;
+    --feat-s: 55%;
+    --feat-line-l: 38%;
+    --feat-bg-l: 88%;
+    --feat-ink-l: 24%;
+    --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1311;
+      --surface: #141A18;
+      --band: #111715;
+      --ink: #E2E8E5;
+      --muted: #9AA8A2;
+      --faint: #6E7B76;
+      --rule: #232D29;
+      --rule-strong: #34403B;
+      --accent: #5FC0A0;
+      --accent-ink: #0B1512;
+      --accent-soft: #16302A;
+      --hover: #19231F;
+      --mark: #6A5616;
+      --error: #F4A39B;
+      --hatch: #2A3531;
+      --core-bg: #1B2320;
+      --core-line: #4A5853;
+      --feat-s: 48%;
+      --feat-line-l: 58%;
+      --feat-bg-l: 22%;
+      --feat-ink-l: 78%;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E1311;
+    --surface: #141A18;
+    --band: #111715;
+    --ink: #E2E8E5;
+    --muted: #9AA8A2;
+    --faint: #6E7B76;
+    --rule: #232D29;
+    --rule-strong: #34403B;
+    --accent: #5FC0A0;
+    --accent-ink: #0B1512;
+    --accent-soft: #16302A;
+    --hover: #19231F;
+    --mark: #6A5616;
+    --error: #F4A39B;
+    --hatch: #2A3531;
+    --core-bg: #1B2320;
+    --core-line: #4A5853;
+    --feat-s: 48%;
+    --feat-line-l: 58%;
+    --feat-bg-l: 22%;
+    --feat-ink-l: 78%;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 14px/1.45 var(--font-sans);
+    display: flex; flex-direction: column; gap: 12px;
+    padding-inline: clamp(16px, 3vw, 32px); padding-block: 18px 16px;
+    height: 100dvh;
+  }
+
+  /* Top bar */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
+  h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  h1 a { color: inherit; text-decoration: none; }
+  .tagline { color: var(--muted); font-size: 13px; margin: 2px 0 0; max-width: 70ch; }
+  .totals { display: flex; gap: 18px; font-variant-numeric: tabular-nums; }
+  .total { display: grid; gap: 1px; text-align: right; }
+  .total b { font: 600 18px/1.1 var(--font-mono); }
+  .total span { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Shell */
+  .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 250px) 1fr; gap: 12px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+    min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* Sidebar */
+  .side-head { padding: 10px; border-bottom: 1px solid var(--rule); display: grid; gap: 8px; }
+  input[type="search"], input[type="text"] {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--rule-strong); border-radius: 7px;
+    background: var(--band); color: var(--ink); font: 13px var(--font-mono);
+  }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input.bad { border-color: var(--error); }
+  .side-list { overflow: auto; padding: 6px; }
+  .group-row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline;
+    width: 100%; text-align: left; padding: 5px 8px; border: 0; border-radius: 6px;
+    background: none; color: inherit; font: 13px var(--font-sans); cursor: pointer;
+  }
+  .group-row:hover { background: var(--hover); }
+  .group-row[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .group-row .name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .group-row .count { font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .group-row .inst { color: var(--faint); font: 11px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .empty { padding: 14px; color: var(--faint); font-size: 13px; }
+
+  /* Main */
+  .main { overflow: auto; }
+  .main-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); background: var(--band); position: sticky; top: 0; z-index: 3; }
+  .main-head h2 { margin: 0; font: 600 17px var(--font-mono); }
+  .main-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  .variants { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; }
+  .variant-tab {
+    display: grid; gap: 1px; text-align: left; padding: 7px 11px; cursor: pointer;
+    border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--surface); color: inherit;
+    font: 13px var(--font-sans);
+  }
+  .variant-tab:hover { background: var(--hover); }
+  .variant-tab[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .variant-tab b { font: 600 13px var(--font-mono); }
+  .variant-tab span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .variant-tab[aria-current="true"] span { color: inherit; }
+  .variant-tab.match { box-shadow: inset 0 0 0 2px var(--mark); }
+
+  .body { padding: 12px 16px 24px; display: grid; gap: 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { border: 1px solid var(--rule); border-radius: 9px; padding: 9px 12px; min-width: 120px; }
+  .card b { display: block; font: 600 17px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .card span { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  details { border: 1px solid var(--rule); border-radius: 9px; background: var(--band); }
+  details > summary {
+    cursor: pointer; padding: 8px 12px; font-weight: 600; font-size: 13px;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  details > summary::marker { color: var(--faint); }
+  details > summary em { font-style: normal; color: var(--faint); font-weight: 400; font-size: 12px; }
+  details > div { padding: 0 12px 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font: 11px var(--font-mono); padding: 2px 6px; border-radius: 5px;
+    background: var(--surface); border: 1px solid var(--rule); color: var(--muted);
+  }
+  .chip.on { background: var(--mark); color: var(--ink); border-color: transparent; }
+  .lines { margin: 0; font: 12px/1.6 var(--font-mono); color: var(--muted); display: grid; gap: 1px; }
+  .lines li { list-style: none; }
+  .lines b { color: var(--ink); font-weight: 600; }
+
+  /* Feature legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; }
+  .feat {
+    display: flex; align-items: center; gap: 7px; padding: 5px 9px; cursor: pointer;
+    border: 1px solid var(--rule-strong); border-radius: 7px; background: var(--surface);
+    color: inherit; font: 12px var(--font-sans); text-align: left;
+  }
+  .feat:hover { background: var(--hover); }
+  .feat[aria-pressed="true"] { border-color: hsl(var(--h) var(--feat-s) var(--feat-line-l)); background: hsl(var(--h) var(--feat-s) var(--feat-bg-l)); }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none;
+    background: hsl(var(--h) var(--feat-s) var(--feat-bg-l)); border: 1px solid hsl(var(--h) var(--feat-s) var(--feat-line-l)); }
+  .feat .num { font: 600 12px var(--font-mono); }
+  .feat .meta { color: var(--faint); font: 11px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .feat.core .swatch { background: var(--core-bg); border-color: var(--core-line); }
+
+  /* Register map */
+  .map { display: grid; gap: 3px; }
+  .reg { display: grid; grid-template-columns: 78px minmax(96px, 168px) 1fr; gap: 8px; align-items: center; }
+  .reg.dim { opacity: 0.3; }
+  .reg .off { font: 12px var(--font-mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+  .reg .rname { font: 500 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reg .rname .alias { color: var(--faint); font-weight: 400; }
+  .reg.opt .off::after { content: "◆"; margin-left: 5px; color: hsl(var(--h) var(--feat-s) var(--feat-line-l)); }
+  .bits {
+    display: grid; height: 22px; border: 1px solid var(--rule-strong); border-radius: 4px; overflow: hidden;
+    background: repeating-linear-gradient(-45deg, transparent 0 3px, var(--hatch) 3px 4px);
+  }
+  .bit {
+    grid-row: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
+    font: 10px var(--font-mono); white-space: nowrap; padding: 0 2px; min-width: 0;
+    background: var(--core-bg); box-shadow: inset 0 0 0 1px var(--core-line); color: var(--ink);
+  }
+  .bit.opt { background: hsl(var(--h) var(--feat-s) var(--feat-bg-l));
+    box-shadow: inset 0 0 0 1px hsl(var(--h) var(--feat-s) var(--feat-line-l));
+    color: hsl(var(--h) var(--feat-s) var(--feat-ink-l)); }
+  .bit.faded { opacity: 0.22; }
+  .bit.hit { box-shadow: inset 0 0 0 2px var(--accent); }
+  .scale { display: grid; font: 9px var(--font-mono); color: var(--faint); margin-bottom: 1px; }
+  .scale span { grid-row: 1; text-align: center; }
+  .more { justify-self: start; padding: 6px 12px; border: 1px solid var(--rule-strong); border-radius: 7px;
+    background: var(--surface); color: inherit; font: 13px var(--font-sans); cursor: pointer; }
+  .more:hover { background: var(--hover); }
+  .note { color: var(--faint); font-size: 12px; }
+  a { color: var(--accent); }
+
+  @media (max-width: 720px) {
+    .shell { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 28vh) 1fr; }
+    .reg { grid-template-columns: 62px 1fr; }
+    .reg .bits, .reg .scale { grid-column: 1 / -1; }
+  }
+</style>
+<header class="top">
+  <div class="brand">
+    <h1>Peripheral Variant Explorer</h1>
+    <p class="tagline">
+      The register maps of every peripheral instance of every STM32 device, merged into as few
+      variants as possible. Each variant is one silicon implementation: a core that every instance
+      has, plus the optional features that only some have.
+      Reconstructed from the CMSIS headers by <a href="https://github.com/modm-io/modm-data">modm-data</a>,
+      see also the <a href="../svd/">SVD Register Explorer</a>.
+    </p>
+  </div>
+  <div class="totals">
+    <div class="total"><b id="t-instances">–</b><span>instances</span></div>
+    <div class="total"><b id="t-shapes">–</b><span>register maps</span></div>
+    <div class="total"><b id="t-variants">–</b><span>variants</span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="panel" aria-label="Peripheral groups">
+    <div class="side-head">
+      <input id="filter" type="search" placeholder="filter groups, e.g. ^(TIM|GPIO)" aria-label="Filter peripheral groups by regular expression" autocomplete="off" spellcheck="false">
+      <input id="device" type="text" placeholder="highlight a device, e.g. F407" aria-label="Highlight the variants used by a device" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="side-list" id="groups"></div>
+  </nav>
+
+  <main class="panel main" id="main">
+    <div class="main-head">
+      <h2 id="g-name">Loading…</h2>
+      <p id="g-sub"></p>
+    </div>
+    <div class="variants" id="tabs"></div>
+    <div class="body" id="detail"></div>
+  </main>
+</div>
+<script>
+"use strict";
+
+const state = {index: null, group: null, data: null, variant: 0, feature: null, device: "", map: ""};
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const num = (value) => value.toLocaleString("en-US");
+// Golden angle keeps neighbouring features far apart in hue
+const hue = (index) => Math.round((index * 137.508 + 8) % 360);
+
+function regex(pattern) {
+  if (!pattern) return null;
+  try { return new RegExp(pattern, "i"); } catch { return undefined; }
+}
+
+/* ---------------------------------------------------------------- groups */
+
+function renderGroups() {
+  const list = $("groups");
+  list.textContent = "";
+  const pattern = regex(state.filter);
+  $("filter").classList.toggle("bad", pattern === undefined);
+  const groups = state.index.groups.filter((g) => !pattern || pattern.test(g.name));
+  if (!groups.length) {
+    list.append(el("p", "empty", "No peripheral group matches."));
+    return;
+  }
+  for (const group of groups) {
+    const row = el("button", "group-row");
+    row.type = "button";
+    row.setAttribute("aria-current", String(group.name === state.group));
+    row.append(el("span", "name", group.name));
+    row.append(el("span", "inst", num(group.instances)));
+    const count = el("span", "count", String(group.variants.length));
+    count.title = `${group.variants.length} variants of ${group.shapes} distinct register maps`;
+    row.append(count);
+    row.addEventListener("click", () => selectGroup(group.name));
+    list.append(row);
+  }
+}
+
+/* --------------------------------------------------------------- loading */
+
+async function selectGroup(name, variant = 0) {
+  state.group = name;
+  state.variant = variant;
+  state.feature = null;
+  state.map = "";
+  renderGroups();
+  $("g-name").textContent = name;
+  $("g-sub").textContent = "Loading…";
+  $("tabs").textContent = "";
+  $("detail").textContent = "";
+  try {
+    const response = await fetch(`${encodeURIComponent(name)}.json`);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    state.data = await response.json();
+  } catch (error) {
+    $("g-sub").textContent = `Could not load ${name}.json: ${error.message}`;
+    return;
+  }
+  history.replaceState(null, "", `#${name}/${variant}`);
+  renderGroup();
+}
+
+function renderGroup() {
+  const data = state.data;
+  const maps = data.variants.reduce((sum, v) => sum + v.members.length, 0);
+  $("g-name").textContent = data.name;
+  $("g-sub").textContent =
+    `${num(data.instances)} instances on ${num(data.devices.length)} devices, ` +
+    `${num(maps)} distinct register maps, ${data.variants.length} ` +
+    `${data.variants.length === 1 ? "variant" : "variants"}`;
+
+  const device = regex(state.device);
+  const tabs = $("tabs");
+  tabs.textContent = "";
+  data.variants.forEach((variant, index) => {
+    const tab = el("button", "variant-tab");
+    tab.type = "button";
+    tab.setAttribute("aria-current", String(index === state.variant));
+    if (device && variant.devices.some((d) => device.test(data.devices[d]))) tab.classList.add("match");
+    tab.append(el("b", null, `variant ${index}`));
+    tab.append(el("span", null, `${num(variant.instances)} inst · ${variant.devices.length} dev · ${variant.members.length} maps`));
+    tab.addEventListener("click", () => {
+      state.variant = index;
+      state.feature = null;
+      history.replaceState(null, "", `#${data.name}/${index}`);
+      renderGroup();
+    });
+    tabs.append(tab);
+  });
+  renderVariant();
+}
+
+/* -------------------------------------------------------------- variants */
+
+function renderVariant() {
+  const data = state.data;
+  const variant = data.variants[state.variant];
+  const body = $("detail");
+  body.textContent = "";
+  if (!variant) return;
+
+  const core = variant.registers.reduce(
+    (sum, r) => sum + (r.feature < 0 ? 1 : 0) + r.fields.filter((f) => f.feature < 0).length, 0);
+  const total = variant.registers.reduce((sum, r) => sum + 1 + r.fields.length, 0);
+  body.append(cards([
+    [num(variant.instances), "instances"],
+    [num(variant.devices.length), "devices"],
+    [num(variant.members.length), "register maps"],
+    [num(variant.registers.length), "registers"],
+    [`${num(core)}/${num(total)}`, "core elements"],
+    [num(variant.features.length), "features"],
+  ]));
+
+  body.append(legend(variant));
+  if (Object.keys(variant.conflicts).length) body.append(conflicts(variant));
+  if (variant.renames.length) body.append(renames(variant));
+  body.append(devices(variant, data));
+  body.append(mapFilter());
+  body.append(registerMap(variant));
+}
+
+function cards(entries) {
+  const wrap = el("div", "cards");
+  for (const [value, label] of entries) {
+    const card = el("div", "card");
+    card.append(el("b", null, value));
+    card.append(el("span", null, label));
+    wrap.append(card);
+  }
+  return wrap;
+}
+
+function legend(variant) {
+  const wrap = el("div", "legend");
+  const all = el("button", "feat core");
+  all.type = "button";
+  all.setAttribute("aria-pressed", String(state.feature === null));
+  all.append(el("span", "swatch"));
+  all.append(el("span", "num", "core"));
+  all.append(el("span", "meta", "in every instance"));
+  all.addEventListener("click", () => { state.feature = null; renderVariant(); });
+  wrap.append(all);
+
+  variant.features.forEach((feature, index) => {
+    const button = el("button", "feat");
+    button.type = "button";
+    button.style.setProperty("--h", hue(index));
+    button.setAttribute("aria-pressed", String(state.feature === index));
+    button.append(el("span", "swatch"));
+    button.append(el("span", "num", `feature ${index}`));
+    button.append(el("span", "meta",
+      `${feature.elements} el · ${feature.members.length}/${variant.members.length} maps · ${feature.devices.length} dev`));
+    button.title =
+      `${feature.elements} elements in ${feature.registers} registers, ` +
+      `implemented by ${feature.instances} instances on ${feature.devices.length} devices`;
+    button.addEventListener("click", () => {
+      state.feature = state.feature === index ? null : index;
+      renderVariant();
+    });
+    wrap.append(button);
+  });
+  return wrap;
+}
+
+function details(summaryText, count, build) {
+  const box = el("details");
+  const summary = el("summary");
+  summary.append(document.createTextNode(summaryText));
+  summary.append(el("em", null, count));
+  box.append(summary);
+  const inner = el("div");
+  build(inner);
+  box.append(inner);
+  return box;
+}
+
+function conflicts(variant) {
+  const entries = Object.entries(variant.conflicts);
+  const total = entries.reduce((sum, [, lines]) => sum + lines.length, 0);
+  return details("Why this is a separate variant", `${total} conflicts`, (inner) => {
+    inner.append(el("p", "note",
+      "These names sit at a different address in the other variant, so no single driver can address both."));
+    for (const [other, lines] of entries) {
+      const list = el("ul", "lines");
+      const head = el("li");
+      head.append(el("b", null, `vs variant ${other}`));
+      list.append(head);
+      for (const line of lines.slice(0, 40)) list.append(el("li", null, line));
+      if (lines.length > 40) list.append(el("li", null, `… and ${lines.length - 40} more`));
+      inner.append(list);
+    }
+  });
+}
+
+function renames(variant) {
+  return details("Renamed, but the same silicon", `${variant.renames.length} aliases`, (inner) => {
+    inner.append(el("p", "note",
+      "Same address, different name: these were merged and every name is kept as an alias."));
+    const list = el("ul", "lines");
+    for (const line of variant.renames.slice(0, 200)) list.append(el("li", null, line));
+    if (variant.renames.length > 200) list.append(el("li", null, `… and ${variant.renames.length - 200} more`));
+    inner.append(list);
+  });
+}
+
+function devices(variant, data) {
+  const pattern = regex(state.device);
+  return details("Devices and instances", `${variant.devices.length} devices`, (inner) => {
+    const names = el("div", "chips");
+    for (const name of variant.names) names.append(el("span", "chip", name));
+    inner.append(names);
+    inner.append(el("p", "note", ""));
+    const chips = el("div", "chips");
+    for (const index of variant.devices) {
+      const name = data.devices[index];
+      const chip = el("span", "chip", name);
+      if (pattern && pattern.test(name)) chip.classList.add("on");
+      chips.append(chip);
+    }
+    inner.append(chips);
+  });
+}
+
+function mapFilter() {
+  const wrap = el("div");
+  const input = el("input");
+  input.type = "search";
+  input.value = state.map;
+  input.placeholder = "filter registers and bit fields, e.g. ^CCMR";
+  input.setAttribute("aria-label", "Filter the register map by regular expression");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.addEventListener("input", () => {
+    state.map = input.value;
+    const map = $("detail").querySelector(".map");
+    if (map) map.replaceWith(registerMap(state.data.variants[state.variant]));
+    input.classList.toggle("bad", regex(state.map) === undefined);
+  });
+  wrap.append(input);
+  return wrap;
+}
+
+/* ---------------------------------------------------------- register map */
+
+const LIMIT = 250;
+
+function scaleRow(bits) {
+  const row = el("div", "reg");
+  row.append(el("span", "off"));
+  row.append(el("span", "rname"));
+  const scale = el("div", "scale");
+  scale.style.gridTemplateColumns = `repeat(${bits / 4}, 1fr)`;
+  for (let bit = bits - 1; bit >= 0; bit -= 4) scale.append(el("span", null, String(bit)));
+  row.append(scale);
+  return row;
+}
+
+function registerMap(variant, all = false) {
+  const map = el("div", "map");
+  const pattern = regex(state.map);
+  map.append(scaleRow(32));
+  let shown = 0, hidden = 0;
+  for (const register of variant.registers) {
+    const names = register.names.join(" = ");
+    const hit = pattern && (pattern.test(names) || register.fields.some((f) => f.names.some((n) => pattern.test(n))));
+    if (pattern && !hit) { hidden++; continue; }
+    if (!all && shown >= LIMIT) { hidden++; continue; }
+    shown++;
+    map.append(registerRow(variant, register, pattern));
+  }
+  if (hidden) {
+    const note = el("p", "note", `${num(hidden)} more registers not shown.`);
+    if (!pattern) {
+      const button = el("button", "more", `Show all ${num(variant.registers.length)} registers`);
+      button.type = "button";
+      button.addEventListener("click", () => map.replaceWith(registerMap(variant, true)));
+      map.append(button);
+    } else {
+      map.append(note);
+    }
+  }
+  if (!shown) map.append(el("p", "empty", "No register matches."));
+  return map;
+}
+
+function registerRow(variant, register, pattern) {
+  const row = el("div", "reg");
+  if (register.feature >= 0) {
+    row.classList.add("opt");
+    row.style.setProperty("--h", hue(register.feature));
+  }
+  if (state.feature !== null && register.feature !== state.feature &&
+      !register.fields.some((f) => f.feature === state.feature)) {
+    row.classList.add("dim");
+  }
+
+  const offset = el("span", "off", `0x${register.offset.toString(16).padStart(3, "0")}`);
+  if (register.dim) offset.textContent += `[${register.dim}]`;
+  row.append(offset);
+
+  const name = el("span", "rname");
+  name.append(document.createTextNode(register.names[0] || "?"));
+  if (register.names.length > 1) name.append(el("span", "alias", ` = ${register.names.slice(1).join(" = ")}`));
+  name.title = [register.names.join(" = "), register.description].filter(Boolean).join(" — ");
+  row.append(name);
+
+  row.append(bitStrip(variant, register, pattern));
+  return row;
+}
+
+function bitStrip(variant, register, pattern) {
+  const bits = register.width * 8;
+  const strip = el("div", "bits");
+  strip.style.gridTemplateColumns = `repeat(${bits}, 1fr)`;
+  // Alternates of the same register overlap, so pack them into extra rows
+  const rows = [];
+  for (const field of [...register.fields].sort((a, b) => b.position - a.position || b.width - a.width)) {
+    const start = bits - (field.position + field.width);
+    let index = rows.findIndex((row) => row.every(([s, w]) => start >= s + w || start + field.width <= s));
+    if (index < 0) index = rows.push([]) - 1;
+    rows[index].push([start, field.width]);
+
+    // A label only fits into a cell that is a few bits wide, the rest is in the tooltip
+    const cell = el("div", "bit", field.width >= 3 ? field.names[0] || "" : "");
+    cell.style.gridColumn = `${start + 1} / span ${field.width}`;
+    cell.style.gridRow = String(index + 1);
+    if (field.feature >= 0) {
+      cell.classList.add("opt");
+      cell.style.setProperty("--h", hue(field.feature));
+    }
+    if (state.feature !== null && field.feature !== state.feature) cell.classList.add("faded");
+    if (pattern && field.names.some((n) => pattern.test(n))) cell.classList.add("hit");
+    const range = field.width === 1 ? `${field.position}` : `${field.position + field.width - 1}:${field.position}`;
+    const where = field.feature < 0
+      ? "core: every instance of this variant"
+      : `feature ${field.feature}: ${variant.features[field.feature].devices.length} devices`;
+    cell.title = [`${field.names.join(" = ")} [${range}]`, field.description, where].filter(Boolean).join("\n");
+    strip.append(cell);
+  }
+  strip.style.gridAutoRows = "21px";
+  return strip;
+}
+
+/* ----------------------------------------------------------------- setup */
+
+$("filter").addEventListener("input", (event) => {
+  state.filter = event.target.value;
+  renderGroups();
+});
+$("device").addEventListener("input", (event) => {
+  state.device = event.target.value;
+  if (state.data) renderGroup();
+});
+
+async function start() {
+  try {
+    const response = await fetch("variants.json");
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    state.index = await response.json();
+  } catch (error) {
+    $("g-name").textContent = "Could not load variants.json";
+    $("g-sub").textContent = `${error.message}. Serve this folder over HTTP, the JSON files sit next to this page.`;
+    return;
+  }
+  state.index.groups.sort((a, b) => b.variants.length - a.variants.length || a.name.localeCompare(b.name));
+  $("t-instances").textContent = num(state.index.instances);
+  $("t-shapes").textContent = num(state.index.shapes);
+  $("t-variants").textContent = num(state.index.variants);
+  renderGroups();
+  const [name, variant] = decodeURIComponent(location.hash.slice(1)).split("/");
+  const known = state.index.groups.find((g) => g.name === name);
+  selectGroup(known ? name : state.index.groups[0].name, known ? Number(variant) || 0 : 0);
+}
+
+start();
+</script>
