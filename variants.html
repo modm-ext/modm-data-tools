@@ -115,6 +115,15 @@
 
   /* Sidebar */
   .side-head { padding: 10px; border-bottom: 1px solid var(--rule); display: grid; gap: 8px; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .modes button {
+    padding: 5px 4px; border: 1px solid var(--rule-strong); border-radius: 7px; cursor: pointer;
+    background: var(--band); color: var(--muted); font: 600 11px var(--font-sans); display: grid; gap: 1px;
+  }
+  .modes button span { font: 400 10px var(--font-mono); color: var(--faint); }
+  .modes button:hover { background: var(--hover); }
+  .modes button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .modes button[aria-pressed="true"] span { color: inherit; }
   input[type="search"], input[type="text"] {
     width: 100%; padding: 7px 9px; border: 1px solid var(--rule-strong); border-radius: 7px;
     background: var(--band); color: var(--ink); font: 13px var(--font-mono);
@@ -135,7 +144,7 @@
   .empty { padding: 14px; color: var(--faint); font-size: 13px; }
 
   /* Main */
-  .main { overflow: auto; }
+  .main { overflow: hidden; }
   .main-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); background: var(--band); position: sticky; top: 0; z-index: 3; }
   .main-head h2 { margin: 0; font: 600 17px var(--font-mono); }
   .main-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
@@ -152,7 +161,11 @@
   .variant-tab[aria-current="true"] span { color: inherit; }
   .variant-tab.match { box-shadow: inset 0 0 0 2px var(--mark); }
 
-  .body { padding: 12px 16px 24px; display: grid; gap: 14px; }
+  .body {
+    padding: 12px 16px 16px; flex: 1; min-height: 0;
+    display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px;
+  }
+  .meta { display: grid; gap: 10px; align-content: start; overflow: auto; max-height: min(34vh, 360px); }
   .cards { display: flex; flex-wrap: wrap; gap: 10px; }
   .card { border: 1px solid var(--rule); border-radius: 9px; padding: 9px 12px; min-width: 120px; }
   .card b { display: block; font: 600 17px var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -195,10 +208,10 @@
   .feat.core .swatch { background: var(--core-bg); border-color: var(--core-line); }
 
   /* Register map */
-  .stage { display: grid; grid-template-columns: 1fr minmax(240px, 300px); gap: 10px; align-items: start; }
+  .stage { display: grid; grid-template-columns: 1fr minmax(240px, 300px); gap: 10px; min-height: 0; }
   .canvas-wrap {
     position: relative; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden;
-    background: var(--surface); height: min(70vh, 720px);
+    background: var(--surface); height: 100%; min-height: 320px;
   }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
   canvas.dragging { cursor: grabbing; }
@@ -225,7 +238,7 @@
   .inspect {
     border: 1px solid var(--rule); border-radius: 9px; background: var(--band);
     padding: 10px 12px; display: grid; gap: 8px; align-content: start;
-    max-height: min(70vh, 720px); overflow: auto;
+    max-height: 100%; overflow: auto;
   }
   .inspect h3 { margin: 0; font: 600 14px var(--font-mono); overflow-wrap: anywhere; }
   .inspect .sub { color: var(--muted); font: 12px var(--font-mono); }
@@ -244,7 +257,14 @@
   .inspect dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
   .inspect hr { border: 0; border-top: 1px solid var(--rule); margin: 2px 0; width: 100%; }
 
-  @media (max-width: 1000px) { .stage { grid-template-columns: 1fr; } .inspect { max-height: none; } }
+  @media (max-width: 1000px) {
+    .main { overflow: auto; }
+    .body { grid-template-rows: none; }
+    .meta { max-height: none; overflow: visible; }
+    .stage { grid-template-columns: 1fr; }
+    .canvas-wrap { height: 60vh; }
+    .inspect { max-height: none; }
+  }
 
   @media (max-width: 720px) {
     .shell { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 28vh) 1fr; }
@@ -273,6 +293,10 @@
 <div class="shell">
   <nav class="panel" aria-label="Peripheral groups">
     <div class="side-head">
+      <div class="modes" id="modes" role="group" aria-label="Compatibility mode">
+        <button type="button" data-mode="binary" aria-pressed="true">binary<span>by address</span></button>
+        <button type="button" data-mode="source" aria-pressed="false">source<span>by name</span></button>
+      </div>
       <input id="filter" type="search" placeholder="filter groups, e.g. ^(TIM|GPIO)" aria-label="Filter peripheral groups by regular expression" autocomplete="off" spellcheck="false">
       <input id="device" type="text" placeholder="highlight a device, e.g. F407" aria-label="Highlight the variants used by a device" autocomplete="off" spellcheck="false">
     </div>
@@ -291,7 +315,8 @@
 <script>
 "use strict";
 
-const state = {index: null, group: null, data: null, variant: 0, feature: null, device: "", map: ""};
+const state = {all: null, index: null, mode: "binary", group: null, data: null,
+  variant: 0, feature: null, device: "", filter: "", map: ""};
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
@@ -350,14 +375,14 @@ async function selectGroup(name, variant = 0) {
   $("tabs").textContent = "";
   $("detail").textContent = "";
   try {
-    const response = await fetch(`${encodeURIComponent(name)}.json`);
+    const response = await fetch(`${state.mode}/${encodeURIComponent(name)}.json`);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     state.data = await response.json();
   } catch (error) {
-    $("g-sub").textContent = `Could not load ${name}.json: ${error.message}`;
+    $("g-sub").textContent = `Could not load ${state.mode}/${name}.json: ${error.message}`;
     return;
   }
-  history.replaceState(null, "", `#${name}/${variant}`);
+  history.replaceState(null, "", `#${state.mode}/${name}/${variant}`);
   renderGroup();
 }
 
@@ -384,7 +409,7 @@ function renderGroup() {
     tab.addEventListener("click", () => {
       state.variant = index;
       state.feature = null;
-      history.replaceState(null, "", `#${data.name}/${index}`);
+      history.replaceState(null, "", `#${state.mode}/${data.name}/${index}`);
       renderGroup();
     });
     tabs.append(tab);
@@ -400,10 +425,12 @@ function renderVariant() {
   body.textContent = "";
   if (!variant) return;
 
+  const meta = el("div", "meta");
+  body.append(meta);
   const core = variant.registers.reduce(
     (sum, r) => sum + (r.feature < 0 ? 1 : 0) + r.fields.filter((f) => f.feature < 0).length, 0);
   const total = variant.registers.reduce((sum, r) => sum + 1 + r.fields.length, 0);
-  body.append(cards([
+  meta.append(cards([
     [num(variant.instances), "instances"],
     [num(variant.devices.length), "devices"],
     [num(variant.members.length), "register maps"],
@@ -412,11 +439,11 @@ function renderVariant() {
     [num(variant.features.length), "features"],
   ]));
 
-  body.append(legend(variant));
-  if (Object.keys(variant.conflicts).length) body.append(conflicts(variant));
-  if (variant.renames.length) body.append(renames(variant));
-  body.append(devices(variant, state.data));
-  body.append(mapFilter());
+  meta.append(legend(variant));
+  if (Object.keys(variant.conflicts).length) meta.append(conflicts(variant));
+  if (variant.renames.length) meta.append(renames(variant));
+  meta.append(devices(variant, state.data));
+  meta.append(mapFilter());
   body.append(stage(variant));
 }
 
@@ -552,7 +579,7 @@ function mapFilter() {
 /* ---------------------------------------------------------- register map */
 
 const GUTTER = 150;            // fixed left column with the register names
-const ROW_RATIO = 4;           // a bit is this many times taller than it is wide
+const ROW_RATIO = 2;           // a bit is this many times taller than it is wide
 const K_MIN = 0.6, K_MAX = 90; // pixels per bit
 const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
 const FONT_SANS = '"IBM Plex Sans", system-ui, -apple-system, sans-serif';
@@ -671,7 +698,7 @@ function minZoom() {
 }
 
 function fitView() {
-  map.k = clamp((map.width - GUTTER - 24) / 32, K_MIN, 24);
+  map.k = clamp((map.width - GUTTER - 24) / 32, K_MIN, 56);
   map.ox = GUTTER + 12;
   map.oy = 10;
   clampView();
@@ -768,7 +795,7 @@ function paint() {
     ctx.font = `10.5px ${FONT_MONO}`;
     ctx.textAlign = "left";
     ctx.fillStyle = dimmed ? C.faint : C.muted;
-    ctx.fillText(hex(row.register.offset), 10, y);
+    ctx.fillText((row.register.offsets ? "~" : "") + hex(row.register.offset), 10, y);
     ctx.font = `600 11.5px ${FONT_SANS}`;
     ctx.fillStyle = dimmed ? C.faint : row.register.feature < 0 ? C.ink : featureLine(row.register.feature);
     let name = row.register.names[0] || "?";
@@ -879,7 +906,7 @@ function hitTest(px, py) {
 function describe(target) {
   if (target.kind === "register") {
     const r = target.row.register;
-    return `${hex(r.offset)} · ${r.width * 8} bit · ${r.fields.length} fields`;
+    return `${(r.offsets || [r.offset]).map(hex).join("/")} · ${r.width * 8} bit · ${r.fields.length} fields`;
   }
   const f = target.item.field;
   return `[${range(f.position, f.width)}] · ${f.feature < 0 ? "core" : `feature ${f.feature}`}`;
@@ -961,7 +988,10 @@ function renderInspector() {
     facts_.push(["bits", range(node.position, node.width)]);
     facts_.push(["width", `${node.width} bit`]);
     facts_.push(["register", target.row.register.names.join(" = ")]);
-    facts_.push(["offset", hex(target.row.register.offset)]);
+    facts_.push([target.row.register.offsets ? "offsets" : "offset",
+      (target.row.register.offsets || [target.row.register.offset]).map(hex).join(", ")]);
+  } else if (node.offsets) {
+    facts_.push(["offsets", node.offsets.map(hex).join(", ")]);
   } else {
     facts_.push(["offset", hex(node.offset)]);
     facts_.push(["size", `${node.width * 8} bit`]);
@@ -1132,23 +1162,39 @@ $("device").addEventListener("input", (event) => {
   if (state.data) renderGroup();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(); });
+$("modes").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-mode]");
+  if (!button || button.dataset.mode === state.mode) return;
+  setMode(button.dataset.mode);
+  selectGroup(state.group);
+});
+
+function setMode(mode) {
+  state.mode = mode;
+  state.index = state.all.modes[mode];
+  state.index.groups.sort((a, b) => b.variants.length - a.variants.length || a.name.localeCompare(b.name));
+  for (const button of $("modes").querySelectorAll("button[data-mode]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+  }
+  $("t-instances").textContent = num(state.index.instances);
+  $("t-shapes").textContent = num(state.index.shapes);
+  $("t-variants").textContent = num(state.index.variants);
+  renderGroups();
+}
 
 async function start() {
   try {
     const response = await fetch("variants.json");
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    state.index = await response.json();
+    state.all = await response.json();
   } catch (error) {
     $("g-name").textContent = "Could not load variants.json";
     $("g-sub").textContent = `${error.message}. Serve this folder over HTTP, the JSON files sit next to this page.`;
     return;
   }
-  state.index.groups.sort((a, b) => b.variants.length - a.variants.length || a.name.localeCompare(b.name));
-  $("t-instances").textContent = num(state.index.instances);
-  $("t-shapes").textContent = num(state.index.shapes);
-  $("t-variants").textContent = num(state.index.variants);
-  renderGroups();
-  const [name, variant] = decodeURIComponent(location.hash.slice(1)).split("/");
+  const parts = decodeURIComponent(location.hash.slice(1)).split("/");
+  const [mode, name, variant] = parts.length > 2 ? parts : ["binary", ...parts];
+  setMode(state.all.modes[mode] ? mode : "binary");
   const known = state.index.groups.find((g) => g.name === name);
   selectGroup(known ? name : state.index.groups[0].name, known ? Number(variant) || 0 : 0);
 }
