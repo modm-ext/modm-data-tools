@@ -91,19 +91,21 @@
   body {
     margin: 0; background: var(--ground); color: var(--ink);
     font: 14px/1.45 var(--font-sans);
-    display: flex; flex-direction: column; gap: 12px;
-    padding-inline: clamp(16px, 3vw, 32px); padding-block: 18px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    padding-inline: clamp(16px, 3vw, 32px); padding-block: 12px 14px;
     height: 100dvh;
   }
 
   /* Top bar */
-  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
-  h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
-  h1 a { color: inherit; text-decoration: none; }
-  .tagline { color: var(--muted); font-size: 13px; margin: 2px 0 0; max-width: 70ch; }
+  .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; }
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .links { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
   .totals { display: flex; gap: 18px; font-variant-numeric: tabular-nums; }
   .total { display: grid; gap: 1px; text-align: right; }
-  .total b { font: 600 18px/1.1 var(--font-mono); }
+  .total b { font: 600 17px/1.1 var(--font-mono); }
   .total span { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 
   /* Shell */
@@ -148,7 +150,7 @@
   .main-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); background: var(--band); position: sticky; top: 0; z-index: 3; }
   .main-head h2 { margin: 0; font: 600 17px var(--font-mono); }
   .main-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
-  .variants { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; }
+  .variants { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; min-width: 0; }
   .variant-tab {
     display: grid; gap: 1px; text-align: left; padding: 7px 11px; cursor: pointer;
     border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--surface); color: inherit;
@@ -162,10 +164,10 @@
   .variant-tab.match { box-shadow: inset 0 0 0 2px var(--mark); }
 
   .body {
-    padding: 12px 16px 16px; flex: 1; min-height: 0;
+    padding: 12px 16px 16px; flex: 1; min-height: 0; min-width: 0;
     display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px;
   }
-  .meta { display: grid; gap: 10px; align-content: start; overflow: auto; max-height: min(34vh, 360px); }
+  .meta { display: grid; gap: 10px; align-content: start; overflow: auto; max-height: min(38vh, 380px); min-width: 0; }
   .cards { display: flex; flex-wrap: wrap; gap: 10px; }
   .card { border: 1px solid var(--rule); border-radius: 9px; padding: 9px 12px; min-width: 120px; }
   .card b { display: block; font: 600 17px var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -190,10 +192,7 @@
   .lines b { color: var(--ink); font-weight: 600; }
 
   /* Feature legend */
-  .legend {
-    display: flex; flex-wrap: wrap; gap: 6px; max-height: 128px; overflow: auto;
-    padding: 2px; border-radius: 9px;
-  }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; }
   .feat {
     display: flex; align-items: center; gap: 7px; padding: 5px 9px; cursor: pointer;
     border: 1px solid var(--rule-strong); border-radius: 7px; background: var(--surface);
@@ -203,17 +202,18 @@
   .feat[aria-pressed="true"] { border-color: hsl(var(--h) var(--feat-s) var(--feat-line-l)); background: hsl(var(--h) var(--feat-s) var(--feat-bg-l)); }
   .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none;
     background: hsl(var(--h) var(--feat-s) var(--feat-bg-l)); border: 1px solid hsl(var(--h) var(--feat-s) var(--feat-line-l)); }
-  .feat .num { font: 600 12px var(--font-mono); }
+  .feat .num { font: 600 12px var(--font-mono); flex: none; }
+  .feat .label { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .feat .meta { color: var(--faint); font: 11px var(--font-mono); font-variant-numeric: tabular-nums; }
   .feat.core .swatch { background: var(--core-bg); border-color: var(--core-line); }
 
   /* Register map */
-  .stage { display: grid; grid-template-columns: 1fr minmax(240px, 300px); gap: 10px; min-height: 0; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 10px; min-height: 0; }
   .canvas-wrap {
-    position: relative; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden;
+    position: relative; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden; min-width: 0;
     background: var(--surface); height: 100%; min-height: 320px;
   }
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
+  canvas { display: block; width: 100%; height: 100%; min-width: 0; touch-action: none; cursor: default; }
   canvas.dragging { cursor: grabbing; }
   canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .tip {
@@ -273,15 +273,10 @@
   }
 </style>
 <header class="top">
-  <div class="brand">
-    <h1>Peripheral Variant Explorer</h1>
-    <p class="tagline">
-      The register maps of every peripheral instance of every STM32 device, merged into as few
-      variants as possible. Each variant is one silicon implementation: a core that every instance
-      has, plus the optional features that only some have.
-      Reconstructed from the CMSIS headers by <a href="https://github.com/modm-io/modm-data">modm-data</a>,
-      see also the <a href="../svd/">SVD Register Explorer</a>.
-    </p>
+  <h1 class="visually-hidden">Peripheral Variant Explorer</h1>
+  <div class="links">
+    <a href="../svd/">SVD Register Explorer</a>
+    <a href="https://github.com/modm-io/modm-data">modm-data</a>
   </div>
   <div class="totals">
     <div class="total"><b id="t-instances">–</b><span>instances</span></div>
@@ -365,6 +360,7 @@ function renderGroups() {
 /* --------------------------------------------------------------- loading */
 
 async function selectGroup(name, variant = 0) {
+  if (name !== state.group) { view.group = null; view.k = null; view.meta = 0; }
   state.group = name;
   state.variant = variant;
   state.feature = null;
@@ -475,10 +471,12 @@ function legend(variant) {
     button.style.setProperty("--h", hue(index));
     button.setAttribute("aria-pressed", String(state.feature === index));
     button.append(el("span", "swatch"));
-    button.append(el("span", "num", `feature ${index}`));
+    button.append(el("span", "num", `${index}`));
+    if (feature.name) button.append(el("span", "label", feature.name));
     button.append(el("span", "meta",
       `${feature.elements} el · ${feature.members.length}/${variant.members.length} maps · ${feature.devices.length} dev`));
     button.title =
+      `${feature.name ? feature.name + "\n" : ""}` +
       `${feature.elements} elements in ${feature.registers} registers, ` +
       `implemented by ${feature.instances} instances on ${feature.devices.length} devices`;
     button.addEventListener("click", () => {
@@ -589,6 +587,7 @@ const map = {
   hover: null, selected: null, colors: null, hatch: null, frame: 0, canvas: null, ctx: null,
 };
 const widths = new Map();
+const view = {group: null, k: null, ox: 0, oy: 0, meta: 0};
 
 function stage(variant) {
   const wrap = el("div", "stage");
@@ -617,6 +616,7 @@ function stage(variant) {
   inspect.id = "inspect";
   wrap.append(inspect);
 
+  view.meta = $("detail").querySelector(".meta")?.scrollTop ?? view.meta;
   map.variant = variant;
   map.canvas = canvas;
   map.ctx = canvas.getContext("2d");
@@ -624,7 +624,22 @@ function stage(variant) {
   map.hover = null;
   map.selected = null;
   attach(canvas);
-  requestAnimationFrame(() => { resize(); fitView(); renderInspector(); });
+  requestAnimationFrame(() => {
+    resize();
+    // Keep the zoom and the position when moving between variants of one group
+    if (view.group === state.group && view.k) {
+      map.k = view.k;
+      map.ox = view.ox;
+      map.oy = view.oy;
+      clampView();
+      draw();
+    } else {
+      fitView();
+    }
+    const meta = $("detail").querySelector(".meta");
+    if (meta) meta.scrollTop = view.meta;
+    renderInspector();
+  });
   return wrap;
 }
 
@@ -707,9 +722,13 @@ function fitView() {
 
 function clampView() {
   const width = map.width - GUTTER, height = map.height;
+  view.group = state.group;
   const contentW = 32 * map.k, contentH = map.layout.rowCount * rowHeight();
   map.ox = clamp(map.ox, GUTTER + Math.min(12, width - contentW), GUTTER + Math.max(12, width - contentW));
   map.oy = clamp(map.oy, Math.min(10, height - contentH - 10), 10);
+  view.k = map.k;
+  view.ox = map.ox;
+  view.oy = map.oy;
 }
 
 function zoomAt(px, py, factor) {
@@ -909,7 +928,10 @@ function describe(target) {
     return `${(r.offsets || [r.offset]).map(hex).join("/")} · ${r.width * 8} bit · ${r.fields.length} fields`;
   }
   const f = target.item.field;
-  return `[${range(f.position, f.width)}] · ${f.feature < 0 ? "core" : `feature ${f.feature}`}`;
+  const variant = map.variant;
+  const feature = f.feature < 0 ? "core" :
+    `feature ${f.feature}${variant.features[f.feature].name ? ": " + variant.features[f.feature].name : ""}`;
+  return `[${range(f.position, f.width)}] · ${feature}`;
 }
 
 function label(target) {
@@ -935,7 +957,8 @@ function renderInspector() {
 
   if (target && target.kind === "feature") {
     const feature = variant.features[target.index];
-    box.append(el("h3", null, `Feature ${target.index}`));
+    box.append(el("h3", null, feature.name || `Feature ${target.index}`));
+    box.append(el("div", "sub", `feature ${target.index}`));
     const badge = el("span", "badge opt", "optional");
     badge.style.setProperty("--h", hue(target.index));
     box.append(badge);
@@ -978,8 +1001,14 @@ function renderInspector() {
       ? `${target.row.register.names[0]} [${range(node.position, node.width)}]`
       : `${hex(node.offset)} · ${node.width * 8} bit`));
   const badge = el("span", `badge${feature < 0 ? "" : " opt"}`, feature < 0 ? "core" : `feature ${feature}`);
-  if (feature >= 0) badge.style.setProperty("--h", hue(feature));
+  if (feature >= 0) {
+    badge.style.setProperty("--h", hue(feature));
+    badge.title = variant.features[feature].name || "";
+  }
   box.append(badge);
+  if (feature >= 0 && variant.features[feature].name) {
+    box.append(el("div", "sub", variant.features[feature].name));
+  }
   if (node.description) box.append(el("p", null, node.description));
 
   const facts_ = [];
