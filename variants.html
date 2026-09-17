@@ -117,7 +117,7 @@
 
   /* Sidebar */
   .side-head { padding: 10px; border-bottom: 1px solid var(--rule); display: grid; gap: 8px; }
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
   .modes button {
     padding: 5px 4px; border: 1px solid var(--rule-strong); border-radius: 7px; cursor: pointer;
     background: var(--band); color: var(--muted); font: 600 11px var(--font-sans); display: grid; gap: 1px;
@@ -291,6 +291,7 @@
       <div class="modes" id="modes" role="group" aria-label="Compatibility mode">
         <button type="button" data-mode="binary" aria-pressed="true">binary<span>by address</span></button>
         <button type="button" data-mode="source" aria-pressed="false">source<span>by name</span></button>
+        <button type="button" data-mode="similar" aria-pressed="false">similar<span>docs aside</span></button>
       </div>
       <input id="filter" type="search" placeholder="filter groups, e.g. ^(TIM|GPIO)" aria-label="Filter peripheral groups by regular expression" autocomplete="off" spellcheck="false">
       <input id="device" type="text" placeholder="highlight a device, e.g. F407" aria-label="Highlight the variants used by a device" autocomplete="off" spellcheck="false">
@@ -389,7 +390,8 @@ function renderGroup() {
   $("g-sub").textContent =
     `${num(data.instances)} instances on ${num(data.devices.length)} devices, ` +
     `${num(maps)} distinct register maps, ${data.variants.length} ` +
-    `${data.variants.length === 1 ? "variant" : "variants"}`;
+    `${data.variants.length === 1 ? "variant" : "variants"}` +
+    (data.ignored && data.ignored.length ? ` · not compared: ${data.ignored.join(", ")}` : "");
 
   const device = regex(state.device);
   const tabs = $("tabs");
@@ -825,9 +827,26 @@ function paint() {
     ctx.font = `600 11.5px ${FONT_SANS}`;
     ctx.fillStyle = dimmed ? C.faint : row.register.feature < 0 ? C.ink : featureLine(row.register.feature);
     let name = row.register.names[0] || "?";
-    while (name.length > 3 && textWidth(ctx, name) > GUTTER - 68) name = name.slice(0, -2) + "…";
+    const tag = accessTag(row.register);
+    const room = GUTTER - 68 - (tag ? 18 : 0);
+    while (name.length > 3 && textWidth(ctx, name) > room) name = name.slice(0, -2) + "…";
     ctx.fillText(name, 58, y);
+    if (tag) {
+      ctx.font = `600 9px ${FONT_MONO}`;
+      ctx.fillStyle = C.faint;
+      ctx.textAlign = "right";
+      ctx.fillText(tag, GUTTER - 8, y);
+    }
   }
+}
+
+const ACCESS = {"read-only": "ro", "write-only": "wo", "read-write": "rw"};
+
+// Almost every register is declared read-write, so only the exceptions are marked
+function accessTag(register) {
+  const access = register.access || [];
+  if (!access.length || (access.length === 1 && access[0] === "read-write")) return "";
+  return access.map((a) => ACCESS[a] || a).join("/");
 }
 
 function matches(pattern, row) {
@@ -936,7 +955,9 @@ function hitTest(px, py) {
 function describe(target) {
   if (target.kind === "register") {
     const r = target.row.register;
-    return `${(r.offsets || [r.offset]).map(hex).join("/")} · ${r.width * 8} bit · ${r.fields.length} fields`;
+    const tag = accessTag(r);
+    return `${(r.offsets || [r.offset]).map(hex).join("/")} · ${r.width * 8} bit · ${r.fields.length} fields` +
+      (tag ? ` · ${tag}` : "");
   }
   const f = target.item.field;
   const variant = map.variant;
@@ -1030,11 +1051,13 @@ function renderInspector() {
     facts_.push(["register", target.row.register.names.join(" = ")]);
     facts_.push([target.row.register.offsets ? "offsets" : "offset",
       (target.row.register.offsets || [target.row.register.offset]).map(hex).join(", ")]);
-  } else if (node.offsets) {
-    facts_.push(["offsets", node.offsets.map(hex).join(", ")]);
+    if (target.row.register.access && target.row.register.access.length) {
+      facts_.push(["access", target.row.register.access.join(", ")]);
+    }
   } else {
-    facts_.push(["offset", hex(node.offset)]);
+    facts_.push(node.offsets ? ["offsets", node.offsets.map(hex).join(", ")] : ["offset", hex(node.offset)]);
     facts_.push(["size", `${node.width * 8} bit`]);
+    if (node.access && node.access.length) facts_.push(["access", node.access.join(", ")]);
     if (node.dim) facts_.push(["array", `${node.dim} entries`]);
     facts_.push(["fields", String(node.fields.length)]);
   }
