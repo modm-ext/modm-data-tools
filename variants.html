@@ -360,7 +360,7 @@ function renderGroups() {
 /* --------------------------------------------------------------- loading */
 
 async function selectGroup(name, variant = 0) {
-  if (name !== state.group) { view.group = null; view.k = null; view.meta = 0; }
+  if (name !== state.group) view.meta = 0;
   state.group = name;
   state.variant = variant;
   state.feature = null;
@@ -418,6 +418,8 @@ function renderGroup() {
 function renderVariant() {
   const variant = state.data.variants[state.variant];
   const body = $("detail");
+  const previous = body.querySelector(".meta");
+  if (previous) view.meta = previous.scrollTop;
   body.textContent = "";
   if (!variant) return;
 
@@ -578,7 +580,7 @@ function mapFilter() {
 
 const GUTTER = 150;            // fixed left column with the register names
 const ROW_RATIO = 2;           // a bit is this many times taller than it is wide
-const K_MIN = 0.6, K_MAX = 90; // pixels per bit
+const K_MIN = 1, K_MAX = 90;   // pixels per bit
 const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
 const FONT_SANS = '"IBM Plex Sans", system-ui, -apple-system, sans-serif';
 
@@ -616,7 +618,6 @@ function stage(variant) {
   inspect.id = "inspect";
   wrap.append(inspect);
 
-  view.meta = $("detail").querySelector(".meta")?.scrollTop ?? view.meta;
   map.variant = variant;
   map.canvas = canvas;
   map.ctx = canvas.getContext("2d");
@@ -626,11 +627,12 @@ function stage(variant) {
   attach(canvas);
   requestAnimationFrame(() => {
     resize();
-    // Keep the zoom and the position when moving between variants of one group
-    if (view.group === state.group && view.k) {
+    // Keep the zoom everywhere, so that the shapes of peripherals and variants can be compared.
+    // Another peripheral starts at its first register, a variant of the same one where it was.
+    if (view.k) {
       map.k = view.k;
       map.ox = view.ox;
-      map.oy = view.oy;
+      map.oy = view.group === state.group ? view.oy : 10;
       clampView();
       draw();
     } else {
@@ -709,7 +711,7 @@ function resize() {
 }
 
 function minZoom() {
-  return Math.max(K_MIN, Math.min((map.width - GUTTER - 24) / 32, 4));
+  return K_MIN;
 }
 
 function fitView() {
@@ -805,12 +807,17 @@ function paint() {
   ctx.fillRect(0, 0, GUTTER, H);
   ctx.fillStyle = C.rule;
   ctx.fillRect(GUTTER - 1, 0, 1, H);
+  // Zoomed out, the rows are thinner than a label, so only label as many as fit
+  let lastLabel = -Infinity;
+  const selectedRow = map.selected && map.selected.row;
   for (const row of L.rows) {
     if (row.y + row.height < first || row.y > last) continue;
     const top = sy(row.y), height = row.height * rowH;
-    if (height < 9 || top > H || top + height < 0) continue;
+    if (top > H || top + height < 0) continue;
     const y = top + Math.min(height, 20) / 2;
     const dimmed = pattern && !matches(pattern, row);
+    if (y - lastLabel < 14 && row !== selectedRow) continue;
+    lastLabel = y;
     ctx.font = `10.5px ${FONT_MONO}`;
     ctx.textAlign = "left";
     ctx.fillStyle = dimmed ? C.faint : C.muted;
@@ -836,24 +843,26 @@ function drawRegister(ctx, row, pattern) {
   const dimmed = pattern && !matches(pattern, row);
   ctx.globalAlpha = dimmed ? 0.25 : 1;
 
-  // The register itself, with the bits that no field covers left hatched
-  ctx.fillStyle = C.band;
+  // The register itself, with the bits that no field covers left hatched. Too small for the
+  // hatching and the outline, the register is filled solid so that its extent stays visible.
+  const outlined = h >= 4;
+  ctx.fillStyle = outlined ? C.band : C.rule;
   ctx.fillRect(x, y, w, h);
-  if (map.hatch && h >= 3) { ctx.fillStyle = map.hatch; ctx.fillRect(x, y, w, h); }
+  if (map.hatch && outlined) { ctx.fillStyle = map.hatch; ctx.fillRect(x, y, w, h); }
 
   const showText = rowH >= 13;
   for (const {field, lane, start} of row.items) {
     const fx = sx(32 - row.bits + start), fy = y + lane * rowH;
     const fw = field.width * map.k, fh = rowH;
     const hit = pattern && field.names.some((n) => pattern.test(n));
-    ctx.fillStyle = hit ? C.mark : field.feature < 0 ? C.coreBg : featureFill(field.feature);
-    ctx.fillRect(fx, fy, fw, fh);
     if (state.feature !== null && field.feature !== state.feature) {
       ctx.globalAlpha = dimmed ? 0.12 : 0.28;
     }
+    ctx.fillStyle = hit ? C.mark : field.feature < 0 ? C.coreBg : featureFill(field.feature);
+    ctx.fillRect(fx, fy, fw, fh);
     ctx.strokeStyle = field.feature < 0 ? C.coreLine : featureLine(field.feature);
     ctx.lineWidth = 1;
-    if (fw >= 2 && fh >= 2) ctx.strokeRect(fx + 0.5, fy + 0.5, fw - 1, fh - 1);
+    if (fw >= 3 && fh >= 4) ctx.strokeRect(fx + 0.5, fy + 0.5, fw - 1, fh - 1);
     if (showText) {
       ctx.fillStyle = field.feature < 0 ? C.ink : featureInk(field.feature);
       const name = field.names[0] || "";
@@ -872,9 +881,11 @@ function drawRegister(ctx, row, pattern) {
     ctx.globalAlpha = dimmed ? 0.25 : 1;
   }
 
-  ctx.strokeStyle = row.register.feature < 0 ? C.ruleStrong : featureLine(row.register.feature);
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+  if (outlined) {
+    ctx.strokeStyle = row.register.feature < 0 ? C.ruleStrong : featureLine(row.register.feature);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+  }
 
   // Bit numbers below the register once there is room for them
   if (map.k >= 15 && rowH >= 56) {
