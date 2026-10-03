@@ -172,7 +172,6 @@
     writing-mode: vertical-rl; font: 600 10px/1 var(--font-mono); font-style: normal; color: var(--muted);
     text-align: center; white-space: nowrap; overflow: hidden;
   }
-  .off .pin { opacity: 0.5; }
 
   /* Connectors */
   .conn { display: grid; gap: 3px; }
@@ -264,12 +263,6 @@
     <div class="side-head">
       <input id="filter" type="search" placeholder="pin, function, use or bridge, e.g. ^SPI\d_SCK$|PA5|RMII|^SB13$" aria-label="Filter pins and alternate functions by regular expression" autocomplete="off" spellcheck="false">
       <input id="board" type="search" placeholder="boards, e.g. F4|L4" aria-label="Filter boards by regular expression" autocomplete="off" spellcheck="false">
-      <label id="l-types">Connectors</label>
-      <div class="modes" id="types" role="group" aria-labelledby="l-types">
-        <button type="button" data-type="morpho" aria-pressed="true">morpho</button>
-        <button type="button" data-type="arduino" aria-pressed="false">ARDUINO</button>
-        <button type="button" data-type="zio" aria-pressed="false">Zio</button>
-      </div>
       <label id="l-free">Pins</label>
       <div class="modes" id="free" role="group" aria-labelledby="l-free">
         <button type="button" data-free="" aria-pressed="true">all<span>on the headers</span></button>
@@ -299,8 +292,7 @@
 <script>
 "use strict";
 
-const TYPES = ["morpho", "arduino", "zio"];
-const state = {boards: [], filter: "", board: "", types: new Set(["morpho"]), compat: "name", free: "", shown: new Map(), pinned: null};
+const state = {boards: [], filter: "", board: "", compat: "name", free: "", shown: new Map(), pinned: null};
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
@@ -317,11 +309,14 @@ function regex(pattern) {
 
 /* -------------------------------------------------------------- matching */
 
-// The connectors of the selected types, with a position name that is comparable between boards
+// All connectors of a board with their place on it, which makes them comparable between boards
 function connectors(board) {
-  return Object.entries(board.connectors)
-    .filter(([, connector]) => state.types.has(connector.type))
-    .map(([name, connector]) => ({name, connector, position: connector.side ? `${connector.type} ${connector.side}` : name}));
+  let nano = 0;
+  return Object.entries(board.connectors).map(([name, connector]) => {
+    const spot = place(connector, () => nano++);
+    const position = spot ? `${connector.type} ${spot.side} ${spot.row}` : name;
+    return {name, connector, spot, position};
+  });
 }
 
 // What the board itself connects to the pin: ST-LINK, Ethernet PHY, crystal, LED, button, ...
@@ -379,7 +374,7 @@ function analyze(board, pattern) {
       key.push(`${position}.${number}=${what}`);
     }
   }
-  return {key: key.join("|"), count, marks, empty: !connectors(board).length};
+  return {key: key.join("|"), count, marks};
 }
 
 /* ------------------------------------------------------------- rendering */
@@ -408,7 +403,7 @@ function renderPin(board, name, number, pin, hit, side) {
 
 // The rows that the ARDUINO and Zio headers occupy next to the morpho headers. All boards use the
 // ARDUINO Uno footprint, where the right headers count from the bottom. Zio extends it downwards.
-function place(connector) {
+function place(connector, nano) {
   const count = Math.max(...Object.keys(connector.pins).map(Number));
   const gpio = Object.values(connector.pins).some((pin) => pin.kind === "gpio");
   if (connector.type === "arduino") {
@@ -416,6 +411,8 @@ function place(connector) {
     if (count === 6) return {side: "left", row: 13};
     if (count === 9 || count === 10) return {side: "right", row: 1, reverse: true, count: 10};
     if (count === 8) return {side: "right", row: 11, reverse: true};
+    // The two ARDUINO Nano headers of the Nucleo-32 boards both count from the top
+    if (count === 15) return {side: nano() ? "right" : "left", row: 0};
   }
   if (connector.type === "zio") {
     return {16: {side: "left", row: 4}, 30: {side: "left", row: 13}, 20: {side: "right", row: 1}, 34: {side: "right", row: 11}}[count];
@@ -427,12 +424,11 @@ function renderRows(board, name, connector, result, spot = {}) {
   // ARDUINO Uno and Nano headers are a single row, morpho and Zio have an odd and an even row
   const single = connector.type === "arduino";
   const mirror = single && spot.side === "right";
-  const scope = state.types.has(connector.type);
-  const rows = el("div", `rows${single ? " single" : ""}${mirror ? " mirror" : ""}${scope ? "" : " off"}`);
+  const rows = el("div", `rows${single ? " single" : ""}${mirror ? " mirror" : ""}`);
   const last = spot.count || Math.max(...Object.keys(connector.pins).map(Number));
   const cell = (number, side) => {
     const pin = connector.pins[number];
-    const mark = scope && result.marks.get(`${name}.${number}`);
+    const mark = result.marks.get(`${name}.${number}`);
     return pin ? renderPin(board, name, number, pin, mark, side) : el("div", "pin nc " + side, "?");
   };
   if (single) {
@@ -457,19 +453,16 @@ function renderBoard(board, result) {
     node.append(" ", el("span", "", [connector.type, connector.side].filter(Boolean).join(" ")));
     return node;
   };
-  for (const [name, connector] of Object.entries(board.connectors)) {
-    const spot = place(connector);
+  for (const {name, connector, spot} of connectors(board)) {
     const {rows, count} = renderRows(board, name, connector, result, spot);
     if (!spot) {
-      // Headers without a known place on the board are only shown when they are selected
-      if (!state.types.has(connector.type)) continue;
       const block = el("div", "conn");
       block.append(label("b", name, connector), rows);
       wrap.append(block);
       continue;
     }
     // Columns: left morpho, left inner, right inner, right morpho
-    const column = spot.morpho ? (spot.side === "left" ? 1 : 4) : (spot.side === "left" ? 2 : 3);
+    const column = spot.morpho ? (spot.side === "left" ? 1 : 4) : spot.side === "left" ? 2 : 3;
     const node = spot.morpho ? rows : el("div", "slot");
     if (spot.morpho) {
       const title = label("b", name, connector);
@@ -496,12 +489,10 @@ function render() {
 
   const groups = new Map();
   const without = [];
-  const missing = [];
   let pins = 0;
   for (const board of state.boards) {
     if (boardPattern && !boardPattern.test(board.board) && !boardPattern.test(board.device || "")) continue;
     const result = analyze(board, pattern);
-    if (result.empty) { missing.push(board); continue; }
     if (pattern && !result.count) { without.push(board); continue; }
     pins += result.count;
     if (!groups.has(result.key)) groups.set(result.key, []);
@@ -514,10 +505,9 @@ function render() {
   $("t-groups").textContent = String(sorted.length);
   $("t-pins").textContent = pattern ? String(pins) : "–";
   $("m-title").textContent = pattern ? `/${state.filter}/i` : "All pins";
-  const types = TYPES.filter((type) => state.types.has(type)).join(", ");
   $("m-sub").textContent = pattern
-    ? `${total} boards have matching pins on their ${types} connectors, in ${sorted.length} position compatible sets.`
-    : `${total} boards in ${sorted.length} sets with identical ${types} connectors.`;
+    ? `${total} boards have matching pins, in ${sorted.length} position compatible sets.`
+    : `${total} boards in ${sorted.length} sets with identical connectors.`;
 
   const list = $("list");
   const main = $("groups");
@@ -567,12 +557,10 @@ function render() {
   };
   if (!sorted.length) main.append(el("p", "empty", "No pin matches."));
   rest(without, "without a matching pin");
-  rest(missing, `without ${types} connector data`);
 
   const hash = new URLSearchParams();
   if (state.filter) hash.set("q", state.filter);
   if (state.board) hash.set("b", state.board);
-  hash.set("c", TYPES.filter((type) => state.types.has(type)).join(","));
   hash.set("m", state.compat);
   if (state.free) hash.set("f", state.free);
   history.replaceState(null, "", "#" + hash);
@@ -621,10 +609,11 @@ function inspect(id) {
     const title = el("b", "", ids.join(", "));
     const group = ids.length < bridge.ids.length ? `with ${bridge.ids.filter((id) => !ids.includes(id)).join(", ")}` : "";
     title.append(" ", el("span", "", [bridge.name, group].filter(Boolean).join(" · ")));
+    title.title = bridge.source || "";
     block.append(title);
     for (const option of bridge.states) {
       const line = el("p", option.default ? "default" : "");
-      line.append(el("code", "", option.state + (option.default ? " default" : "")), el("span", "", option.text));
+      line.append(el("code", "", option.state + (option.default ? (bridge.default_from ? ` default in ${bridge.default_from}` : " default") : "")), el("span", "", option.text));
       block.append(line);
     }
     panel.append(block);
@@ -652,7 +641,7 @@ function toggle(container, attribute, apply) {
     if (!button) return;
     apply(button.dataset[attribute]);
     for (const other of container.querySelectorAll("button")) {
-      other.setAttribute("aria-pressed", String(attribute === "type" ? state.types.has(other.dataset.type) : other === button));
+      other.setAttribute("aria-pressed", String(other === button));
     }
     render();
   });
@@ -672,14 +661,11 @@ async function start() {
   const hash = new URLSearchParams(location.hash.slice(1));
   state.filter = hash.get("q") || "";
   state.board = hash.get("b") || "";
-  const types = (hash.get("c") || "morpho").split(",").filter((type) => TYPES.includes(type));
-  if (types.length) state.types = new Set(types);
   if (["name", "function", "position"].includes(hash.get("m"))) state.compat = hash.get("m");
   state.free = ["bridge", "free"].includes(hash.get("f")) ? hash.get("f") : "";
   for (const button of $("free").querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset.free === state.free));
   $("filter").value = state.filter;
   $("board").value = state.board;
-  for (const button of $("types").querySelectorAll("button")) button.setAttribute("aria-pressed", String(state.types.has(button.dataset.type)));
   for (const button of $("compat").querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset.compat === state.compat));
 
   let timer;
@@ -690,10 +676,6 @@ async function start() {
   };
   $("filter").addEventListener("input", later("filter"));
   $("board").addEventListener("input", later("board"));
-  toggle($("types"), "type", (type) => {
-    // At least one connector type stays selected
-    if (state.types.has(type) && state.types.size > 1) state.types.delete(type); else state.types.add(type);
-  });
   toggle($("compat"), "compat", (compat) => { state.compat = compat; });
   toggle($("free"), "free", (free) => { state.free = free; });
 
