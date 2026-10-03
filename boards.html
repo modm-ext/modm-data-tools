@@ -23,6 +23,7 @@
     --hover: #EEF4F1;
     --mark: #FBE3A0;
     --mark-line: #C99A1B;
+    --used: #C2570C;
     --error: #B42318;
     --kind-s: 55%;
     --kind-bg-l: 90%;
@@ -48,6 +49,7 @@
       --hover: #19231F;
       --mark: #6A5616;
       --mark-line: #D9B13F;
+      --used: #F08A45;
       --error: #F4A39B;
       --kind-s: 45%;
       --kind-bg-l: 20%;
@@ -71,6 +73,7 @@
     --hover: #19231F;
     --mark: #6A5616;
     --mark-line: #D9B13F;
+    --used: #F08A45;
     --error: #F4A39B;
     --kind-s: 45%;
     --kind-bg-l: 20%;
@@ -159,7 +162,7 @@
   }
   button.chip:hover { background: var(--hover); }
   .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-  .chip.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .chip.on { background: var(--mark); color: var(--ink); border-color: transparent; }
   .chip.static { cursor: default; }
   .board { display: flex; flex-wrap: wrap; gap: 10px 22px; padding: 2px 12px 12px; align-items: start; overflow-x: auto; }
 
@@ -197,9 +200,8 @@
   .pin.system { --h: 275; }
   .pin.nc { background: none; border-color: transparent; color: var(--nc-ink); }
   .filtered .pin:not(.hit) { opacity: 0.38; }
-  .pin.hit { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .pin.hit { background: var(--mark); border-color: var(--mark-line); color: var(--ink); font-weight: 600; }
   .pin.hit small { color: inherit; font-weight: 400; }
-  .pin.used.hit { background: var(--mark); border-color: var(--accent); color: var(--ink); }
   .inspect .bridge { display: grid; gap: 2px; font-size: 12px; }
   .inspect .bridge > b { font: 600 12px var(--font-mono); }
   .inspect .bridge > b span { font-weight: 400; color: var(--muted); }
@@ -208,17 +210,17 @@
   .inspect .bridge p.default { color: var(--ink); }
   .inspect .bridge p.default code { color: var(--ink); font-weight: 600; }
   /* Pins that the board itself already uses */
-  .pin.used { background: var(--mark); border-color: transparent; color: var(--ink); }
+  .pin.used.r { box-shadow: inset 3px 0 0 var(--used); }
+  .pin.used.l { box-shadow: inset -3px 0 0 var(--used); }
+  .pin.used small { color: var(--used); }
   /* A solder bridge may free a used pin or change what a pin is connected to */
-  .pin.used.sb { background: var(--surface); border: 1px solid var(--mark-line); }
-  .pin.sb:not(.used):not(.hit) { border-style: dashed; border-color: var(--muted); }
+  .pin.sb:not(.hit) { border-style: dashed; border-color: var(--muted); }
   .pin.sb { position: relative; }
   .pin.sb::after {
     content: ""; position: absolute; top: 0; right: 0; border: 3px solid;
     border-color: var(--muted) var(--muted) transparent transparent;
   }
   .pin.sb.l::after { right: auto; left: 0; border-color: var(--muted) transparent transparent var(--muted); }
-  .pin.used small { color: inherit; }
   .free .pin.used:not(.sb), .free-free .pin.used { opacity: 0.38; }
   .pin.same { outline: 2px dashed var(--accent); outline-offset: -1px; opacity: 1 !important; }
   .pin:hover, .pin.sel { outline: 2px solid var(--accent); outline-offset: -1px; opacity: 1 !important; }
@@ -388,12 +390,14 @@ function renderPin(board, name, number, pin, hit, side) {
     node.classList.add("sb");
     node.dataset.bridges = links.flatMap((b) => b.ids).join(" ");
   }
+  // The pin name stays next to the pin number, everything else goes on the outer side
+  const outside = (text) => (side === "l" ? node.prepend(el("small", "", text), " ") : node.append(" ", el("small", "", text)));
   if (hit) {
     node.classList.add("hit");
     const extra = [...hit.names.filter((n) => n !== pin.signal), ...hit.functions];
-    if (extra.length) node.append(" ", el("small", "", extra.join(" ")));
+    if (extra.length) outside(extra.join(" "));
   } else if (use) {
-    node.append(" ", el("small", "", use.label || use.signal));
+    outside(use.label || use.signal);
   }
   node.dataset.pin = `${state.boards.indexOf(board)}|${name}|${number}`;
   if (pin.kind === "gpio") node.dataset.signal = pin.signal;
@@ -575,7 +579,7 @@ function inspect(id) {
     panel.append(el("h3", "", "Pin details"), el("p", "", "Hover a pin to see its alternate functions, click to keep it."));
     const legend = el("div", "legend");
     for (const kind of ["gpio", "power", "ground", "system", "nc"]) legend.append(el("span", `pin ${kind}`, kind));
-    legend.append(el("span", "pin used", "used on board"), el("span", "pin used sb r", "used, has bridge"), el("span", "pin sb r", "has bridge"), el("span", "pin hit", "match"));
+    legend.append(el("span", "pin used r", "used on board"), el("span", "pin used sb r", "used, has bridge"), el("span", "pin sb r", "has bridge"), el("span", "pin hit", "match"));
     panel.append(legend);
     return;
   }
