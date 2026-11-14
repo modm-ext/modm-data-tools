@@ -16,7 +16,6 @@
   h1 { font-size: 16px; margin: 0 0 4px; }
   a { color: inherit; }
   .sub { color: var(--dim); font-size: 12px; }
-  .warn { color: var(--bad); font-size: 11px; }
   .note { color: var(--warn); margin: 4px 0; }
   .legend span { margin-right: 14px; }
   .sw { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 4px; }
@@ -52,7 +51,6 @@ const board = new URLSearchParams(location.search).get("board");
 const key = (e) => `${e[0]}=${typeof e[1] === "number" ? Number(e[1]) : e[1]}`;
 const count = (b) => [b.covered.length, b.covered.length + b.uncovered.length];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const warn = `<div class="warn">Derived from ST SLA licensed STM32CubeMX data.</div>`;
 
 if (!board || !coverage[board]) index(); else graph(board, coverage[board]);
 
@@ -70,7 +68,7 @@ function index() {
   }
   page.innerHTML = `<h1>Clock graph test coverage</h1><div class="sub">The CubeMX clock graph measured by the hardware clock meter,
     ${Object.keys(coverage).length} boards. Nodes: ${allNodes[0]}/${allNodes[1]} had a measured signal pass through them.
-    Config: ${all[0]}/${all[1]} mux inputs, divider factors and range min/mid/max tested.</div>${warn}
+    Config: ${all[0]}/${all[1]} mux inputs, divider factors and range min/mid/max tested.</div>
     <table><tr><th>board</th><th>device</th><th>nodes</th><th></th><th></th><th>config</th><th></th><th></th><th></th><th>notes</th></tr>${rows}</table>`;
 }
 
@@ -174,7 +172,7 @@ async function graph(name, b) {
   page.innerHTML = `<div class="sub"><a href="?">← all boards</a></div>
     <h1>${name} <span class="sub">${b.device} · nodes ${b.nodes.length}/${b.nodes_total} (${Math.round(100 * b.nodes.length / b.nodes_total)}%)
       · config ${c}/${t} (${Math.round(100 * c / t)}%) · ${b.cases} cases</span></h1>
-    <div class="sub" style="overflow-wrap:anywhere">config: <code>${esc(b.config.replace(/,/g, ", "))}</code></div>${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}${warn}
+    <div class="sub" style="overflow-wrap:anywhere">config: <code>${esc(b.config.replace(/,/g, ", "))}</code></div>${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
     <div class="legend sub"><span><i class="sw" style="background:var(--ok)"></i>tested, passed</span>
       <span><i class="sw" style="background:var(--no)"></i>not tested</span><span><i class="sw" style="background:var(--bad)"></i>tested, failed</span>
       <span><i class="sw" style="background:var(--warn)"></i>partly tested / oscillator off on this board</span>
