@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STM32 Clock Solver</title>
+<style>
+  /* Same palette as coverage.html: green = the clock flows here, grey = idle, red = breaks a limit */
+  :root {
+    --bg: #F7F7F4; --panel: #FFFFFF; --line: #D5DAD7; --ink: #1B211F; --dim: #6B746F;
+    --accent: #1F7A66; --ok: #1E8A4C; --no: #A9B1AD; --bad: #C62A21; --good: #1E8A4C; --lock: #B8741A;
+    --passed: #DDF1E4; --target: #3557B7; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111513; --panel: #19201C; --line: #2E3935; --ink: #E5EAE7; --dim: #93A09A;
+      --accent: #5FD18E; --ok: #5FD18E; --no: #4A5752; --bad: #F2867F; --good: #5FD18E; --lock: #E8B060;
+      --passed: #1C3A2A; --target: #9DB4F5;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111513; --panel: #19201C; --line: #2E3935; --ink: #E5EAE7; --dim: #93A09A;
+    --accent: #5FD18E; --ok: #5FD18E; --no: #4A5752; --bad: #F2867F; --good: #5FD18E; --lock: #E8B060;
+    --passed: #1C3A2A; --target: #9DB4F5;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+         display: flex; flex-direction: column; }
+  header { padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 15px; white-space: nowrap; }
+  .sub { color: var(--dim); font-size: 12px; }
+  .warn { color: var(--bad); font-size: 11px; }
+  input, select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel);
+                  color: var(--ink); font: 12px var(--mono); }
+  button { padding: 4px 10px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent);
+           color: var(--panel); font-size: 12px; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  #device { width: 190px; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 5px var(--side, 380px); min-height: 0; }
+  body.noside main { grid-template-columns: 1fr; }
+  body.noside #side, body.noside #grip { display: none; }
+  #grip { cursor: col-resize; background: var(--line); touch-action: none; }
+  #grip:hover, #grip.drag { background: var(--accent); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 40vh; } #grip { display: none; } }
+  #side { overflow: auto; padding: 10px 12px; background: var(--panel); }
+  .panel { margin-bottom: 14px; }
+  .panel h2 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); }
+  .opt { display: grid; grid-template-columns: 1fr 170px; gap: 6px; align-items: center; margin-bottom: 4px; font: 11px var(--mono); }
+  .opt select { width: 100%; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto;
+        font: 11px/1.45 var(--mono); margin: 0; white-space: pre; tab-size: 4; }
+  .ok { color: var(--good); } .err { color: var(--bad); }
+  ul.list { margin: 0; padding-left: 16px; font: 11px var(--mono); }
+  #status { font-size: 12px; }
+
+  #stage { position: relative; overflow: hidden; cursor: grab; touch-action: none; }
+  #stage.panning { cursor: grabbing; }
+  #pan { position: absolute; left: 0; top: 0; will-change: transform; }
+  #world { position: relative; }
+  #wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  #wires path { fill: none; stroke: var(--line); stroke-width: 1; }
+  #wires path.sel { stroke: var(--no); stroke-width: 1.4; }
+  #wires path.live { stroke: var(--ok); stroke-width: 2.2; }
+  .node { position: absolute; width: 172px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+          padding: 4px 6px 5px; font-size: 11px; overflow: hidden; }
+  .node.used { background: var(--passed); }
+  .node.locked { border-color: var(--lock); }
+  .node.target { border-color: var(--target); box-shadow: 0 0 0 1px var(--target); }
+  .node.bad { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 30%, transparent); }
+  .node.periph { width: 150px; }
+  .node.card { width: 250px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .chip { padding: 0 5px; border-radius: 4px; border: 1px solid var(--no); background: var(--panel); color: var(--dim);
+          font: 10.5px var(--mono); cursor: pointer; }
+  .chip.sel { border-color: var(--ink); color: var(--ink); box-shadow: inset 0 -2px 0 currentColor; }
+  .chip.sel.ok { border-color: var(--ok); color: var(--ok); }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 4px; cursor: move;
+          font: 600 10.5px var(--mono); }
+  .head .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind { font: 9px var(--mono); color: var(--dim); text-transform: uppercase; }
+  .hz { font: 600 12px var(--mono); }
+  .hz.none { color: var(--dim); font-weight: 400; }
+  .row { display: flex; gap: 4px; align-items: center; margin-top: 3px; }
+  .row select, .row input { flex: 1; min-width: 0; padding: 1px 4px; font-size: 10.5px; }
+  .row .lbl { font: 9.5px var(--mono); color: var(--dim); white-space: nowrap; }
+  .tgt { width: 74px; flex: none !important; }
+  .tgt.set { border-color: var(--target); color: var(--target); font-weight: 600; }
+  .lim { font: 9.5px var(--mono); color: var(--dim); margin-top: 2px; }
+  .lim.bad { color: var(--bad); }
+  .feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 0 4px; margin-top: 4px; padding-top: 3px;
+           border-top: 1px dashed var(--line); font: 9.5px var(--mono); color: var(--dim); }
+  .feed { display: flex; align-items: center; gap: 2px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+  .feed input { margin: 0; width: 10px; height: 10px; }
+  .feed.on { color: var(--ink); }
+  .feed.bad { color: var(--bad); font-weight: 600; }
+  .lockbtn { border: none; background: none; cursor: pointer; padding: 0; font-size: 11px; color: var(--dim); }
+  .lockbtn.on { color: var(--lock); }
+  #hud { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; background: var(--panel);
+         border: 1px solid var(--line); border-radius: 7px; padding: 4px; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>STM32 Clock Solver</h1>
+  <input id="device" list="devices" placeholder="device, e.g. STM32G071RB" autocomplete="off">
+  <datalist id="devices"></datalist>
+  <label class="sub">tolerance <input id="tolerance" type="number" min="0" step="10" value="0" style="width:64px"> ppm</label>
+  <button id="solve">Solve</button>
+  <button class="ghost" id="unlock">Unlock all</button>
+  <button class="ghost" id="maxperf" title="highest SYSCLK from the HSE, every peripheral in use if possible">Max performance</button>
+  <button class="ghost" id="reset" title="the clock configuration after reset">Reset to boot config</button>
+  <button class="ghost" id="export" title="download the configuration as JSON">Export</button>
+  <button class="ghost" id="import" title="load a configuration from a JSON file">Import</button>
+  <input id="importFile" type="file" accept=".json,application/json" hidden>
+  <button class="ghost" id="sidebtn" title="show or hide the result, options and code panel">Hide panel</button>
+  <span id="status"></span>
+  <span class="warn">Local only: derived from ST SLA licensed CubeMX data, do not publish.</span>
+</header>
+<main>
+  <div id="stage">
+    <div id="pan"><div id="world"><svg id="wires"></svg></div></div>
+    <div id="hud">
+      <button class="ghost" id="zoomOut">−</button>
+      <button class="ghost" id="zoomIn">+</button>
+      <button class="ghost" id="fit">fit</button>
+      <button class="ghost" id="relayout">layout</button>
+    </div>
+  </div>
+  <div id="grip" title="drag to resize the panel"></div>
+  <div id="side">
+    <div class="panel"><h2>Result</h2><div id="result" class="sub">—</div></div>
+    <div class="panel"><h2>Options and modes</h2><div id="options"></div></div>
+    <div class="panel"><h2>modm Rcc code</h2><pre id="code">—</pre></div>
+  </div>
+</main>
+<script type="module">
+  // Cache-busted so edits show up on reload, the modules import each other with the same version
+  const v = Date.now();
+  await import(`./clocks-app.js?v=${v}`).then((app) => app.start(v)).catch((e) => {
+    document.getElementById("status").innerHTML = `<span class="err">${e.message}</span>`;
+    throw e;
+  });
+</script>
+</body>
+</html>
