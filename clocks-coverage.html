@@ -52,7 +52,7 @@ const board = new URLSearchParams(location.search).get("board");
 const key = (e) => `${e[0]}=${typeof e[1] === "number" ? Number(e[1]) : e[1]}`;
 const count = (b) => [b.covered.length, b.covered.length + b.uncovered.length];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const warn = `<div class="warn">Local only: derived from ST SLA licensed CubeMX data, do not publish.</div>`;
+const warn = `<div class="warn">Derived from ST SLA licensed STM32CubeMX data.</div>`;
 
 if (!board || !coverage[board]) index(); else graph(board, coverage[board]);
 
