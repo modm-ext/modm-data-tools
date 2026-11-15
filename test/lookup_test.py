@@ -16,7 +16,7 @@ from pathlib import Path
 
 from modm_data_tools.lookup.markdown import grid, table_markdown
 from modm_data_tools.lookup.tree import Tree
-from modm_data_tools.lookup import docs, figures, headers, svd
+from modm_data_tools.lookup import docs, figures, headers, pinout, svd
 from modm_data_tools.lookup.__main__ import main as cli
 from modm_data.svd import read_svd
 
@@ -448,6 +448,36 @@ class Lookups(unittest.TestCase):
         )
         assert "give a document" in str(_raises(lambda: docs.doc_grep("x")))
 
+    def test_pinout(self):
+        """Connector pins of a NUCLEO board with their solder bridges, and the alternate functions of the device"""
+        out = pinout.board_pinout("nucleo-u5a5zj-q", connector="CN10", query="A6")
+        assert "CN10-7 A6: PB1," in out and "CN10-9" not in out, out
+        out = pinout.board_pinout("u5a5zj", query="ADC A7")
+        assert "CN10-9 A7: PC2," in out and "[SB53]" in out and "ON*: PC2 is connected to ADC_A7" in out, out
+        assert "CN10-11 A8: PA1," in pinout.board_pinout("NUCLEO-U5A5ZJ-Q", query="A8")
+        # the reverse: all connector pins of a GPIO
+        out = pinout.board_pinout("nucleo-u5a5zj-q", query="PC2")
+        assert "CN10-9 A7: PC2" in out and "CN11-35: PC2" in out, out
+        assert "2 boards match" in str(_raises(lambda: pinout.board_pinout("nucleo-l452")))
+        out = pinout.pin_functions("u5a5zj", "PA2")
+        assert "AF7 USART2_TX" in out and "additional: ADC1_IN7" in out, out
+        assert pinout.pin_functions("g474re", "USART2_TX").endswith("USART2_TX: PA2 AF7, PA14 AF7, PB3 AF7")
+        # TIM1 is neither HRTIM1 nor TIM15, the F1 remaps instead
+        assert "HRTIM" not in (out := pinout.pin_functions("g474re", "TIM1")) and "TIM15" not in out, out
+        assert "USART1_TX: PA9 remap0, PB6 remap1" in pinout.pin_functions("f103c8", "USART1_TX")
+        # pins without signals are still GPIOs, the X of the N6 is a letter, the WBA monoio pins are no GPIOs
+        assert "PB2: -" in pinout.pin_functions("f401re", "PB2")
+        assert pinout.pin_functions("STM32N657X0HxQ", "PF6").startswith("stm32n657x0h6q\n")
+        assert "monoio" in str(_raises(lambda: pinout.pin_functions("wba65ri", "PD6")))
+        # the device of the board file, the marketing name of a Discovery kit, family names are not boards
+        assert "device STM32WB07CCVx" in pinout.board_pinout("nucleo-wb07cc", query="PA6")
+        assert pinout.board_pinout("32F429IDISCOVERY", query="PG13").startswith("STM32F429I-DISCO:")
+        assert pinout.board_pinout("wb55", query="PA2").startswith("NUCLEO-WB55RG:")
+        # CubeMX lacks the C5, devices.db knows it from its DFP
+        assert "device STM32C562RE (by the board name, stm32c562ret3" in pinout.board_pinout(
+            "nucleo-c562re", query="PA2"
+        )
+
     def test_cli(self):
         out = io.StringIO()
         with redirect_stdout(out):
@@ -486,6 +516,10 @@ class Lookups(unittest.TestCase):
                 assert result.is_error and "stm32h745zi@m7" in result.content[0].text, result
                 result = await s.call_tool("find_define", {"pattern": "RCC_(CR"})
                 assert result.is_error and "invalid regex" in result.content[0].text, result
+                result = await s.call_tool("board_pinout", {"board": "nucleo-u5a5zj-q", "query": "A7"})
+                assert "CN10-9 A7: PC2" in result.content[0].text, result
+                result = await s.call_tool("pin_functions", {"device": "u5a5zj", "query": "PA2"})
+                assert "AF7 USART2_TX" in result.content[0].text, result
                 result = await s.call_tool(
                     "doc_figure", {"doc": "RM0440", "figure": "17", "image": True, "region": "C2"}
                 )

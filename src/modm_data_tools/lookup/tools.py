@@ -8,7 +8,7 @@ import inspect
 import re
 import sqlite3
 
-from . import clocks, docs, figures, headers, irq, svd
+from . import clocks, docs, figures, headers, irq, pinout, svd
 
 TOOLS = (
     headers.device_header,
@@ -34,6 +34,8 @@ TOOLS = (
     figures.doc_figure_data,
     irq.irq_events,
     irq.interconnect,
+    pinout.board_pinout,
+    pinout.pin_functions,
 )
 
 # what the functions raise for wrong input, the message is meant for the user

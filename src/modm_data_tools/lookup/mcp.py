@@ -28,7 +28,9 @@ from ..clocks import solver as clocks_solver, configure as clocks_configure
 from ..clocks import modm as clocks_modm, modm_api as clocks_modm_api
 from modm_data.cubemx import clock_tree as cubemx_clock_tree, conditions as cubemx_conditions
 from ..irq import sources as irq_sources, graph as irq_graph, interconnect as irq_interconnect
-from . import clocks, core, docs, figures, headers, irq, svd, tools
+from modm_data import html2pinout
+from modm_data.html2pinout import signals as html2pinout_signals
+from . import clocks, core, docs, figures, headers, irq, pinout, svd, tools
 
 # dependencies before the modules that import from them
 MODULES = (
@@ -57,6 +59,9 @@ MODULES = (
     irq_graph,
     irq_interconnect,
     irq,
+    html2pinout,
+    html2pinout_signals,
+    pinout,
     tools,
 )
 
@@ -77,6 +82,9 @@ server = MCPServer(
         "and decoding values read from a board. "
         "Interrupts: irq_events gives the events ORed into each vector (enable, flag, clear bits, EXTI line) with the "
         "sources that agree, interconnect the peripheral trigger multiplexers (timer ITR, DAC TSEL) with their values. "
+        "Pins: board_pinout gives the connector pins of NUCLEO boards and Discovery kits (label, GPIO, net, solder bridges "
+        "with their defaults) and which connector pins a GPIO is on, pin_functions the alternate function numbers of the "
+        "device pins and which pins can carry a signal like USART2_TX. "
         "The same functions are a CLI: python -m modm_data_tools.lookup <tool> --help. "
         "Over stdio, reload_server loads the code of modm_data_tools.lookup after editing it without a reconnect, "
         "the shared HTTP server restarts by itself."
