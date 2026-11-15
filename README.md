@@ -57,7 +57,7 @@ claude mcp add --scope user --transport http modm-data http://127.0.0.1:8765/mcp
 | [Peripheral Variants](https://data.modm.dev/variants/) | `web/variants/` | `python -m modm_data.svd2variants` |
 | [Board Pinouts](https://data.modm.dev/boards/) | `web/boards/` | `python -m modm_data.html2pinout` |
 | [Pin Mapping](https://data.modm.dev/pinout/) | `web/pinout/`, `templates/pinout/` | `python -m modm_data.pinout --templates templates/pinout` |
-| [Clock Solver](https://data.modm.dev/clocks/) | `web/clocks/` | `python -m modm_data.clocks`, then `python -m modm_data_tools.clocks.export` |
+| [Clock Solver](https://data.modm.dev/clocks/) | `web/clocks/` | `python -m modm_data.clocks`, then `python -m modm_data_tools.clocks` |
 
 The pages are plain HTML, CSS and JavaScript without a build step. `web/` has the
 layout of the homepage, and `make build-homepage` in modm-data copies the pages over

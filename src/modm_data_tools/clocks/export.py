@@ -5,7 +5,7 @@
 Adds what the clock solver page (web/clocks/) needs next to the clock trees that
 `python -m modm_data.clocks --output <folder>` exported:
 
-    python -m modm_data_tools.clocks.export --output <folder>
+    python -m modm_data_tools.clocks --output <folder>
 
 Writes the modm Rcc API of every device in <folder>/data/devices.json that has a
 modm target to data/rcc.json and data/rcc/<id>.json (lbuild of $MODM_REPO, see
@@ -69,7 +69,7 @@ def copy_python(target: Path):
             shutil.copy(source / name, folder / name)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Add the modm Rcc API and the Python code for the clock solver page.")
     parser.add_argument("--output", type=Path, required=True, help="folder of the page with the exported clock trees")
     args = parser.parse_args()
