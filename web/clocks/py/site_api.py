@@ -3,9 +3,9 @@
 import json
 import math
 
-from clocks import evaluate
-from clocks.modm import generate
-from clocks.solver import Solver, max_performance
+from modm_data.clocks import evaluate
+from modm_data_tools.clocks.modm import generate
+from modm_data_tools.clocks.solver import Solver, max_performance
 
 _state = {}
 
@@ -35,8 +35,9 @@ def handle(op: str, args: str) -> str:
         out = evaluate(_state["tree"], a["config"], _use(a.get("use")))
     elif op == "solve":
         targets = {k: float(v) for k, v in a["targets"].items()}
-        out = _state["solver"].solve(a["config"], set(a["locked"]), targets, _use(a.get("use")),
-                                     a.get("tolerance", 0), a.get("budget", 3))
+        out = _state["solver"].solve(
+            a["config"], set(a["locked"]), targets, _use(a.get("use")), a.get("tolerance", 0), a.get("budget", 3)
+        )
     elif op == "max":
         out = max_performance(_state["tree"], a["config"], budget=a.get("budget", 0.6))
         if out is not None:
