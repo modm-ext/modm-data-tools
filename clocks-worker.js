@@ -6,6 +6,8 @@ const FILES = ["__init__.py", "evaluate.py", "solver.py", "configure.py", "modm.
 
 const ready = (async () => {
   const py = await loadPyodide();
+  // modm.py renders the SystemClock struct with a jinja2 template
+  await py.loadPackage("jinja2");
   py.FS.mkdirTree("/home/pyodide/clocks");
   for (const f of [...FILES.map((f) => "clocks/" + f), "site_api.py"]) {
     const text = await (await fetch(`py/${f}`, {cache: "no-store"})).text();
