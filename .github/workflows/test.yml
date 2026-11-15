@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      # The lookups need the private data in ext/ of a modm-data checkout, the CI only checks the code
+      - name: Install modm-data and modm-data-tools
+        run: |
+          pip3 install git+https://github.com/modm-io/modm-data.git@main -e ".[all]"
+
+      - name: Import all Modules
+        run: |
+          python3 -c "import importlib, pkgutil, modm_data_tools as m; [importlib.import_module(i.name) for i in pkgutil.walk_packages(m.__path__, 'modm_data_tools.') if not i.name.endswith('__main__')]"
+
+      - name: Run Ruff Formatter
+        if: always()
+        uses: chartboost/ruff-action@v1
+        with:
+          version: "0.14.10"
+          src: "./src ./test"
+          args: "format --check"
+
+      - name: Run Ruff Linter
+        if: always()
+        uses: chartboost/ruff-action@v1
+        with:
+          version: "0.14.10"
+          src: "./src ./test"
