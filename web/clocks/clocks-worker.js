@@ -1,4 +1,4 @@
-// Runs the Python clock code of modm_data.clocks (copied to py/clocks by site/export.py in modm-data) in Pyodide.
+// Runs the Python clock code of modm_data.clocks (exported to py/clocks by modm-data) and py/site_api.py in Pyodide.
 // Messages are {id, op, args} in and {id, out} or {id, error} out, everything as JSON.
 importScripts("https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js");
 
