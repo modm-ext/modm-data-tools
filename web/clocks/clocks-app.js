@@ -276,7 +276,7 @@ function build() {
 function paint(id) {
   const node = state.tree.nodes[id], box = boxes.get(id), r = state.result[id] ?? {};
   const periph = node.kind === "peripheral";
-  box.className = "node" + (periph ? " periph" : "") + (cards.has(id) ? " card" : "") + (r.used ? " used" : "") +
+  box.className = "node" + (periph ? " periph" : "") + (cards.has(id) ? " wide" : "") + (r.used ? " used" : "") +
     (state.locked.has(id) ? " locked" : "") + (state.targets.has(id) ? " target" : "") +
     (r.errors?.length && r.used ? " bad" : "");
   box.textContent = "";
