@@ -65,6 +65,15 @@ class ClockSolverTest(unittest.TestCase):
         r = max_performance(tree("STM32F411CEUx"), {"HSEOSC": "25000000"})
         self.assertIsNone(r["use"])
         self.assertAlmostEqual(r["result"]["SysCLKOutput"]["freq"], 96e6, delta=0.5e6)
+        # The N6 has no SYSCLK, the CPU clock is its core clock
+        r = max_performance(tree("STM32N657X0HxQ"))
+        self.assertEqual(r["core"], "CpuClockOutput")
+        self.assertEqual(r["result"]["CpuClockOutput"]["freq"], 800e6)
+
+    def test_mux_default_without_input(self):
+        # The HAL2 PLL source of the G5 defaults to NoClock, which is no input: the solver may not keep it
+        r = Solver(tree("STM32G564HBUx")).solve({}, (), {"USART1": 16e6}, {"USART1"}, 0, budget=3)
+        self.assertTrue(r["ok"])
 
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency

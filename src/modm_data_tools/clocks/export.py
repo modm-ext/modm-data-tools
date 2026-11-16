@@ -68,10 +68,13 @@ def export_max_one(path: Path):
         return path.stem, None
     if r is None:
         return path.stem, None
-    # The F0 and F7 limit only HCLK, some trees have no SYSCLK node
-    clock = r["result"].get("SysCLKOutput") or r["result"].get("AHBOutput") or {}
     # what web/clocks/app.js reads of a max_performance() result
-    return path.stem, {"config": r["config"], "use": r["use"], "result": {"SysCLKOutput": {"freq": clock.get("freq")}}}
+    return path.stem, {
+        "config": r["config"],
+        "use": r["use"],
+        "core": r["core"],
+        "result": {r["core"]: {"freq": r["result"][r["core"]]["freq"]}},
+    }
 
 
 def export_max(out: Path, keys: set[str]):
