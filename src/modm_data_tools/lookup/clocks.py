@@ -210,9 +210,10 @@ def _config(text: str) -> dict[str, str]:
 
 
 def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> str:
-    """Clock tree of a device from STM32CubeMX: sources, muxes, dividers, multipliers and outputs with their domains,
-    defaults (marked *), frequency limits (`[..]` of the node, `out [..]` of its output signal, the widest over all
-    voltage scales) and which node clocks each peripheral.
+    """Clock tree of a device from STM32CubeMX with domains, limits and the clock of every peripheral.
+    Its sources, muxes, dividers, multipliers and outputs with their domains, defaults (marked *), frequency limits
+    (`[..]` of the node, `out [..]` of its output signal, the widest over all voltage scales) and which node clocks
+    each peripheral.
     `node`: comma separated nodes, parameters or peripherals to show in detail with the macros, the limits per
     configuration and the path from the clock sources.
     Defaults are the register reset values where CubeMX's own default differs (shown as `CubeMX init`).

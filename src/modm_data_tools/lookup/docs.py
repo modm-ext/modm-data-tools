@@ -334,10 +334,10 @@ def _db() -> sqlite3.Connection:
 
 def clear_caches():
     """Forgets what the lookups cached from the archives, devices.db and the headers"""
-    from . import clocks, core, headers, pinout, svd
+    from . import apps, clocks, core, headers, pinout, svd
     from ..irq import graph, interconnect, sources
 
-    for module in (headers, core, svd, clocks, pinout, sources, graph, interconnect):
+    for module in (headers, core, svd, clocks, pinout, apps, sources, graph, interconnect):
         for function in vars(module).values():
             if hasattr(function, "cache_clear"):
                 function.cache_clear()
@@ -399,8 +399,8 @@ def _parts(db, device: str) -> list[str]:
 
 
 def device_docs(device: str, kinds: str = "DS,RM,ES,PM") -> str:
-    """Documents ST lists for a device (from the CubeMX MCU finder database), e.g. 'stm32g474ret6' or 'stm32g474re',
-    with the version ST lists and the latest version in the HTML archive. `kinds` filters by document prefix
+    """Documents ST lists for a device, with the version ST lists and the latest version in the HTML archive.
+    From the CubeMX MCU finder database, e.g. 'stm32g474ret6' or 'stm32g474re'. `kinds` filters by document prefix
     (DS, RM, ES, PM, AN, UM, TN, DT, ...), empty for all."""
     db = _db()
     parts = _parts(db, device)
@@ -525,12 +525,12 @@ def doc_search(query: str, device: str = "", kind: str = "", doc: str = "", limi
 
 
 def doc_grep(regex: str, doc: str = "", device: str = "", kind: str = "", by: str = "section", limit: int = 15) -> str:
-    """Where a regex occurs in the documents, as hits per section or per chapter (`by`), most hits first, with the hits
-    per 1000 characters and the first hit in context. For what doc_search cannot find: identifiers with digits and
-    underscores ('TIM\\d+_SMCR', 'DMAMUX\\d_C\\d+CR'), addresses, several spellings ('RXF?NE'). A high count with a low
-    density is usually a big table, a high density the section about it. Case-sensitive unless the regex starts
-    with (?i). Needs `doc` or `device`, `kind` filters the documents of a device (e.g. 'RM,ES'). `limit` is at most
-    200."""
+    """Where a regex occurs in the documents, as hits per section or per chapter (`by`), most hits first.
+    With the hits per 1000 characters and the first hit in context. For what doc_search cannot find: identifiers
+    with digits and underscores ('TIM\\d+_SMCR', 'DMAMUX\\d_C\\d+CR'), addresses, several spellings ('RXF?NE'). A high
+    count with a low density is usually a big table, a high density the section about it. Case-sensitive unless the
+    regex starts with (?i). Needs `doc` or `device`, `kind` filters the documents of a device (e.g. 'RM,ES').
+    `limit` is at most 200."""
     if not (doc or device):
         raise UserError("give a document like 'RM0440' or a device, all documents together are too many")
     if by not in ("section", "chapter"):
@@ -587,8 +587,8 @@ def doc_grep(regex: str, doc: str = "", device: str = "", kind: str = "", by: st
 
 
 def doc_toc(doc: str, section: str = "", depth: int = 2) -> str:
-    """Headings of a document, or below one section, `depth` levels deep, with the text size of each section
-    including its subsections (about what doc_section returns)."""
+    """Headings of a document, or below one section, `depth` levels deep, with the text size of each section.
+    The size includes the subsections (about what doc_section returns)."""
     if depth < 1:
         raise UserError("depth must be at least 1")
     db = _db()
@@ -944,7 +944,7 @@ def _select(db, docs: list[str], wanted: str) -> list[tuple[int, str, str, int]]
 
 
 def doc_register(register: str, device: str = "", doc: str = "") -> str:
-    """Description of a register from the reference manual of a device (or the given `doc`): address offset,
+    """Description of a register from the reference manual of a device (or the given `doc`). Address offset,
     reset value and one row per bit field with access and description, footnotes resolved. `register` may be the
     name in the manual ('DMAMUX_CxCR') or a concrete one ('GPIOA_MODER', 'TIM2.CR1', 'FDCAN1_CCCR', 'DMAMUX1_C3CR').
     A concrete instance only returns the sections for it, e.g. TIM2 the one of '(x = 2 to 5)'."""

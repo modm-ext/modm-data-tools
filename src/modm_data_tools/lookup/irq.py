@@ -107,11 +107,11 @@ def irq_events(device: str, query: str = "") -> str:
 
 
 def interconnect(device: str, sink: str = "", signal: str = "") -> str:
-    """Peripheral to peripheral signal multiplexers of a device from the reference manual: timer internal trigger
-    inputs (TIMx_SMCR.TS, sinks named 'TIM2_TS') and DAC triggers (DAC_CR.TSELx, sinks named 'DAC1_TSEL1'), with the
-    register value per signal and the ITRn remaps of the timer option register (F4 TIM2_OR.ITR1_RMP). `sink` and
-    `signal` filter by regex, a number does not continue into another one (sink='TIM2' is not TIM20), e.g.
-    sink='TIM2', signal='TIM3_TRGO'."""
+    """Peripheral to peripheral signal multiplexers of a device from the reference manual, with their values.
+    Timer internal trigger inputs (TIMx_SMCR.TS, sinks named 'TIM2_TS') and DAC triggers (DAC_CR.TSELx, sinks named
+    'DAC1_TSEL1'), with the register value per signal and the ITRn remaps of the timer option register
+    (F4 TIM2_OR.ITR1_RMP). `sink` and `signal` filter by regex, a number does not continue into another one
+    (sink='TIM2' is not TIM20), e.g. sink='TIM2', signal='TIM3_TRGO'."""
     ic = _interconnect.build(device)
     out = [f"{device}: {ic['rm']}, {len(ic['sinks'])} multiplexers"]
     sinks = UserRegex(rf"(?:{sink})(?!\d)" if re.search(r"\d$", sink) else sink, re.I) if sink else None

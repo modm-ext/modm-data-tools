@@ -152,9 +152,10 @@ def _words(query: str, text: str) -> bool:
 
 
 def board_pinout(board: str, connector: str = "", query: str = "") -> str:
-    """The connector pins of a NUCLEO board or Discovery kit from its user manual, e.g. 'nucleo-u5a5zj-q' or
-    'u5a5zj': connector and pin number, label, GPIO, net, function, what the board itself uses the GPIO for (ST-LINK
-    VCP, LED, ...) and the solder bridges that change what the pin is connected to, with their default state (*).
+    """The connector pins of a NUCLEO board or Discovery kit from its user manual, with the solder bridges.
+    For example 'nucleo-u5a5zj-q' or 'u5a5zj': connector and pin number, label, GPIO, net, function, what the board
+    itself uses the GPIO for (ST-LINK VCP, LED, ...) and the solder bridges that change what the pin is connected to,
+    with their default state (*).
     `connector` selects connectors by name or type ('CN10', 'morpho', 'arduino'). `query` selects pins by words that
     must all occur in their label, GPIO, net, function or bridges, e.g. 'A6', 'ADC A7', 'D12', 'SB53' or a GPIO like
     'PC2' to find all connector pins of that GPIO."""
@@ -245,10 +246,10 @@ def _af(af: str) -> str:
 
 
 def pin_functions(device: str, query: str = "") -> str:
-    """The signals of the GPIOs of a device with their alternate function number (AFn, the GPIOx_AFR value), the
-    others are additional functions (ADC inputs, wakeup, ...) without AF. `query` is a pin ('PA2') for its signals or a
-    regex on the signal names ('USART2_TX', 'TIM1_CH', 'SPI') for the pins that can carry them, a number does not
-    continue into another one ('TIM1' is not TIM15). Without `query` all pins."""
+    """The signals of the GPIOs of a device with their alternate function number (AFn, the GPIOx_AFR value).
+    The others are additional functions (ADC inputs, wakeup, ...) without AF. `query` is a pin ('PA2') for its
+    signals or a regex on the signal names ('USART2_TX', 'TIM1_CH', 'SPI') for the pins that can carry them, a number
+    does not continue into another one ('TIM1' is not TIM15). Without `query` all pins."""
     part, parts = _part(device)
     rows = (
         _devices()

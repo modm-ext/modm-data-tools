@@ -281,10 +281,11 @@ def doc_figures(doc: str, query: str = "", section: str = "") -> str:
 
 
 def doc_figure(doc: str, figure: str, image: bool = False, region: str = "") -> str | tuple[str, bytes]:
-    """One figure. As text: its caption and all labels, grouped by the cells of a 4x4 grid over the drawing (columns
-    A-D from the left, rows 1-4 from the top), which shows what the figure contains and where. With `image`, a PNG
-    of the figure for looking at the drawing itself (wires, waveforms, arrows), or only of `region`, a cell or a range
-    of cells like 'D2' or 'C2:D3', which costs a fraction of the whole. Read the text first to pick the region.
+    """One figure: its labels by region of the drawing, or a PNG of it or of one region.
+    As text: its caption and all labels, grouped by the cells of a 4x4 grid over the drawing (columns A-D from the
+    left, rows 1-4 from the top), which shows what the figure contains and where. With `image`, a PNG of the figure
+    for looking at the drawing itself (wires, waveforms, arrows), or only of `region`, a cell or a range of cells like
+    'D2' or 'C2:D3', which costs a fraction of the whole. Read the text first to pick the region.
     The text of figures that are only a bitmap (board photos) comes from OCR and can have misread characters."""
     name, version, (number, caption, sect, path) = _figure(doc, figure)
     box, labels, font = _content(path)
@@ -345,10 +346,11 @@ def doc_figure(doc: str, figure: str, image: bool = False, region: str = "") -> 
 
 
 def doc_figure_data(doc: str, figure: str, x: str = "") -> str:
-    """The data of a figure, read from its exact geometry: the axes and curves of a characteristic chart (typical
-    values over temperature, frequency, load), the lanes of a timing diagram (edges in clock cycles, bus values,
-    timing parameters like t_su(SI) with the signal edges they measure), or a state machine or flowchart as a Mermaid
-    graph with transition labels. `x` is a comma-separated list of x values at which a chart gives the y value of every
+    """The data of a figure: chart curves, timing diagram lanes, state machines and flowcharts as Mermaid.
+    Read from its exact geometry: the axes and curves of a characteristic chart (typical values over temperature,
+    frequency, load), the lanes of a timing diagram (edges in clock cycles, bus values, timing parameters like
+    t_su(SI) with the signal edges they measure), or a state machine or flowchart as a Mermaid graph with transition
+    labels. `x` is a comma-separated list of x values at which a chart gives the y value of every
     curve, e.g. '25,85'. The result is checked against the drawing; an unverified result may be wrong, compare it with
     doc_figure(image=True). Figures that are none of these kinds have no data."""
     from ..figures import figure_data

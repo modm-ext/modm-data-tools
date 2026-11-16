@@ -197,7 +197,7 @@ def _matching(pattern: str, headers) -> set[str]:
 
 def device_condition(pattern: str, family: str = "", condition: str = "") -> str:
     """lbuild template condition for the devices whose header defines a macro matching the regex `pattern`
-    (fullmatch), e.g. `%% set with_register = target.name in ["b0", "b1"]`, one per family.
+    (fullmatch). One per family, e.g. `%% set with_register = target.name in ["b0", "b1"]`.
     With `condition`, checks that existing condition instead and lists the devices it gets wrong."""
     # also accept the output of this tool
     condition = re.sub(r"^\s*(stm32\w+ \([^)]*\):\s*)?%%\s*set\s+\w+\s*=\s*", "", condition.strip())
@@ -513,8 +513,9 @@ def _bus_map(text: str) -> dict[str, list[str]]:
 
 
 def flash_latency(device: str) -> str:
-    """Flash wait states of a device: the highest HCLK frequency for each number of wait states, per supply or
-    core voltage (VOS range, in mV) from devices.db. Devices with the same table are listed together."""
+    """Flash wait states of a device: the highest HCLK frequency for each number of wait states and voltage.
+    The voltage is the supply or core voltage (VOS range, in mV) from devices.db. Devices with the same table are
+    listed together."""
     device = normalize(device).split("@")[0]
     db = _devices()
     rows = db.execute(

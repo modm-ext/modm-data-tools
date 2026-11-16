@@ -13,7 +13,7 @@ import inspect
 import sys
 from pathlib import Path
 
-from .tools import TOOLS, message
+from .tools import TOOLS, message, summary
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -26,7 +26,7 @@ def _parser() -> argparse.ArgumentParser:
         doc = inspect.getdoc(function) or ""
         command = commands.add_parser(
             function.__name__,
-            help=doc.split("\n")[0],
+            help=summary(function),
             description=doc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )

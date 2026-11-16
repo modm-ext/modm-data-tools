@@ -5,6 +5,8 @@
 
 import functools
 import inspect
+import re
+import textwrap
 
 from ..errors import UserError
 from . import apps, clocks, docs, figures, headers, irq, pinout, svd
@@ -36,6 +38,14 @@ TOOLS = (
     pinout.board_pinout,
     pinout.pin_functions,
 )
+
+
+def summary(function) -> str:
+    """The first sentence of the docstring (up to the first '. ' that does not end 'e.g.', or the end of the first
+    paragraph) on one line, for the --help list of the CLI"""
+    paragraph = " ".join((inspect.getdoc(function) or "").split("\n\n")[0].split())
+    sentence = re.split(r"(?<!e\.g)\.(?:\s|$)", paragraph, maxsplit=1)[0].rstrip(".")
+    return textwrap.shorten(sentence + ".", 150, placeholder=" ...")
 
 
 def message(error: Exception) -> str | None:

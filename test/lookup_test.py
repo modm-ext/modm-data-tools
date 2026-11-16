@@ -18,7 +18,7 @@ from unittest import mock
 
 from modm_data_tools.lookup.markdown import grid, table_markdown
 from modm_data_tools.lookup.tree import Tree
-from modm_data_tools.lookup import docs, figures, headers, pinout, svd
+from modm_data_tools.lookup import apps, clocks, docs, figures, headers, pinout, svd
 from modm_data_tools.lookup.__main__ import main as cli
 from modm_data_tools.errors import UserError, UserRegex
 from modm_data.svd import read_svd
@@ -491,9 +491,13 @@ class Lookups(unittest.TestCase):
         """A new index (another archive) forgets what the lookups cached"""
         headers.device_header("g474re")
         assert headers._headers.cache_info().currsize == 1
+        with mock.patch.object(clocks, "_tree", return_value={}):
+            apps._packed("stm32g474ret6")
+        assert apps._packed.cache_info().currsize == 1
         docs._index[0] = ("another index", 0)
         docs._db()
         assert headers._headers.cache_info().currsize == 0 and docs._index[0][0] != "another index"
+        assert apps._packed.cache_info().currsize == 0
 
     def test_figures(self):
         """Figure labels from SVG text and OCR"""

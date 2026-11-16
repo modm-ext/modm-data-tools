@@ -75,6 +75,14 @@ class Registration(unittest.TestCase):
             with self.assertRaises(KeyError):
                 cli(["device_header", "g474re"])
 
+    def test_summaries(self):
+        """The --help list shows the first sentence of every docstring, complete and on one line"""
+        dangling = {"a", "an", "the", "with", "and", "or", "of", "for", "to", "from", "by", "in", "on", "per", "e.g"}
+        for function in tools.TOOLS:
+            text = tools.summary(function)
+            assert text.endswith(".") and "\n" not in text and len(text) <= 120, (function.__name__, text)
+            assert text.rstrip(".").split()[-1].lower() not in dangling, (function.__name__, text)
+
     def test_cli_defaults(self):
         """The CLI options default to the defaults of the signature, booleans also when they default to True"""
         commands = next(a for a in _parser()._actions if a.dest == "tool").choices

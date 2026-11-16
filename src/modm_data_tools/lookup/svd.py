@@ -103,8 +103,8 @@ def _find(peripherals: dict, register: str) -> list[tuple[str, dict]]:
 
 
 def register_map(device: str, peripheral: str) -> str:
-    """All registers of a peripheral instance ('RCC', 'GPIOA', 'TIM1') with address, offset and bit fields,
-    from the SVD generated from the CMSIS header of the device. Register arrays are shown once."""
+    """All registers of a peripheral instance ('RCC', 'GPIOA', 'TIM1') with address, offset and bit fields.
+    From the SVD generated from the CMSIS header of the device. Register arrays are shown once."""
     name, peripherals = _device(device)
     if not peripheral.strip():
         raise UserError("no peripheral given, e.g. 'RCC', see device_header for the device")
