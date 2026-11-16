@@ -59,7 +59,9 @@ def export_apis(out: Path, partnames: list[str]):
 
 def export_max_one(path: Path):
     try:
-        r = max_performance(json.loads(path.read_text()))
+        # The search stops after `budget` seconds, the CI runners are slower than a laptop: plenty of time, so that
+        # the result does not depend on the machine. ponytail: a step limit in the solver would make it exact
+        r = max_performance(json.loads(path.read_text()), budget=20)
     except Exception as error:
         # the page searches in Pyodide for this tree, but not silently
         print(f"{path.stem}: no max performance, {type(error).__name__}: {error}", file=sys.stderr)
