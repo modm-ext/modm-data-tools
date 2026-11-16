@@ -61,6 +61,10 @@ class ClockSolverTest(unittest.TestCase):
         # The F7 limits HCLK only, through the over-drive
         r = max_performance(tree("STM32F767ZITx"), {"HSEOSC": "25000000"})
         self.assertEqual(r["result"]["SysCLKOutput"]["freq"], 216e6)
+        # USB needs 48 MHz from the PLLQ: 96 MHz with every peripheral instead of 100 MHz with none
+        r = max_performance(tree("STM32F411CEUx"), {"HSEOSC": "25000000"})
+        self.assertIsNone(r["use"])
+        self.assertAlmostEqual(r["result"]["SysCLKOutput"]["freq"], 96e6, delta=0.5e6)
 
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency
