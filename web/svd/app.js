@@ -5,8 +5,8 @@
 // button or drag and drop, the file in the URL hash, the table and map tabs and the filter.
 
 import "../shared/site.js";
-import {$, debounce, regex} from "../shared/util.js";
-import {esc, filterDevice, parseSvd, plural} from "./parse.js";
+import {$, debounce, esc, highlight, plural, regex} from "../shared/util.js";
+import {filterDevice, parseSvd} from "./parse.js";
 import {renderTable} from "./table-view.js";
 import {renderDetails, renderMap} from "./map-view.js";
 
@@ -112,7 +112,7 @@ function render() {
 
   if (filter) {
     const peripherals = device.peripherals.filter((p) => filter.keep.has(p.id)).length;
-    setStatus(`${plural(filter.matched.size, "match")} across ${plural(peripherals, "peripheral")}`);
+    setStatus(`${plural(filter.matched.size, "match", "matches")} across ${plural(peripherals, "peripheral")}`);
   } else {
     setStatus(`Filter by name or by dotted path, for example <code>USART1\\.CR1\\.</code> or <code>^CC\\dIF$</code>`);
   }
@@ -334,17 +334,7 @@ function renderMenu() {
   }
   markInvalid($("menu-search"), menuQuery, false);
 
-  const mark = (/** @type {string} */ name) => {
-    if (!re) return esc(name);
-    let out = "", last = 0;
-    for (const m of name.matchAll(new RegExp(re.source, "gi"))) {
-      if (!m[0].length) continue;
-      const index = /** @type {number} */ (m.index);
-      out += esc(name.slice(last, index)) + "<mark>" + esc(m[0]) + "</mark>";
-      last = index + m[0].length;
-    }
-    return out + esc(name.slice(last));
-  };
+  const mark = (/** @type {string} */ name) => highlight(name, re);
   const item = (/** @type {string} */ file, /** @type {string} */ label) =>
     `<li><button class="menu-item" type="button" data-file="${esc(file)}" aria-current="${file === state.current}">${label}</button></li>`;
 

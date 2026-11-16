@@ -32,8 +32,8 @@
         <button type="button" data-mode="source" aria-pressed="false">source<span>by name</span></button>
         <button type="button" data-mode="similar" aria-pressed="false">similar<span>docs aside</span></button>
       </div>
-      <input id="filter" type="search" placeholder="filter groups, e.g. ^(TIM|GPIO)" aria-label="Filter peripheral groups by regular expression" autocomplete="off" spellcheck="false">
-      <input id="device" type="text" placeholder="highlight a device, e.g. F407" aria-label="Highlight the variants used by a device" autocomplete="off" spellcheck="false">
+      <div class="search"><span class="delim" aria-hidden="true">/</span><input id="filter" type="search" placeholder="filter groups, e.g. ^(TIM|GPIO)" aria-label="Filter peripheral groups by regular expression" autocomplete="off" spellcheck="false"><span class="delim" aria-hidden="true">/i</span></div>
+      <div class="search"><span class="delim" aria-hidden="true">/</span><input id="device" type="search" placeholder="highlight a device, e.g. F407" aria-label="Highlight the variants used by a device, by regular expression" autocomplete="off" spellcheck="false"><span class="delim" aria-hidden="true">/i</span></div>
     </div>
     <div class="side-list" id="groups"></div>
   </nav>

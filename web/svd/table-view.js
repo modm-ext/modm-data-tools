@@ -6,25 +6,12 @@
 // the page handles the clicks on the toggles (.tw) and the map buttons (.locate) by data-id.
 // Styles: ../shared/theme.css and table-view.css.
 
-import {el} from "../shared/util.js";
-import {ACCESS, WRITES, bitRange, bitsValue, esc, hexBits, offsetText} from "./parse.js";
+import {el, esc, hex, hexBits, highlight} from "../shared/util.js";
+import {ACCESS, WRITES, bitRange, bitsValue, offsetText} from "./parse.js";
 
 /** @typedef {import("./parse.js").Device} Device */
 /** @typedef {import("./parse.js").Node} Node */
 /** @typedef {import("./parse.js").Filter} Filter */
-
-/** The text with the matches of the filter in <mark>, as HTML. */
-function highlight(/** @type {string} */ text, /** @type {Filter | null} */ filter) {
-  if (!filter || !text) return esc(text);
-  let out = "", last = 0;
-  for (const m of text.matchAll(filter.reG)) {
-    if (!m[0].length) continue;
-    const index = /** @type {number} */ (m.index);
-    out += esc(text.slice(last, index)) + "<mark>" + esc(m[0]) + "</mark>";
-    last = index + m[0].length;
-  }
-  return out + esc(text.slice(last));
-}
 
 /** The access of a register or field, e.g. "rw w1c", as HTML. */
 export function accessHtml(/** @type {Node} */ node) {
@@ -39,8 +26,8 @@ export function accessHtml(/** @type {Node} */ node) {
 
 function rowHtml(/** @type {Node} */ node, /** @type {number} */ depth, /** @type {boolean} */ open, /** @type {Filter | null} */ filter) {
   const hit = filter && filter.matched.has(node.id);
-  const name = hit ? highlight(node.name, filter) : esc(node.name);
-  const desc = hit && filter?.useDesc ? highlight(node.desc, filter) : esc(node.desc);
+  const name = hit ? highlight(node.name, filter?.reG) : esc(node.name);
+  const desc = hit && filter?.useDesc ? highlight(node.desc, filter?.reG) : esc(node.desc);
   const toggle = node.children.length
     ? `<button class="tw" type="button" aria-expanded="${open}" aria-label="${open ? "Collapse" : "Expand"} ${esc(node.path)}"></button>`
     : `<span class="tw-gap"></span>`;
@@ -65,7 +52,7 @@ function rowHtml(/** @type {Node} */ node, /** @type {number} */ depth, /** @typ
       bits = String(node.size);
       access = accessHtml(node);
       reset = node.reset != null ? hexBits(node.reset, node.size ?? 32) : "";
-      if (node.dim) nameTags += `<span class="pill">×${node.dim} +0x${(node.increment ?? 0).toString(16).toUpperCase()}</span>`;
+      if (node.dim) nameTags += `<span class="pill">×${node.dim} +${hex(node.increment ?? 0)}</span>`;
       if (node.alternate) descTags += `<span class="pill">alternate of ${esc(node.alternate)}</span>`;
       if (node.derivedFrom) descTags += `<span class="pill">derived from ${esc(node.derivedFrom)}</span>`;
       break;

@@ -6,34 +6,12 @@
 // They take the variant data and return an element, nothing else, so other pages and the
 // MCP server can show them too. Styles: ../shared/theme.css and variant-view.css.
 
-import {el, num} from "../shared/util.js";
+import {el, num, plural, renderChips, renderFacts} from "../shared/util.js";
 import {elements, hue, offset, range} from "./model.js";
 
 /** @typedef {import("./model.js").Group} Group */
 /** @typedef {import("./model.js").Variant} Variant */
 /** @typedef {import("./model.js").Target} Target */
-
-/**
- * Chips with names, the ones that the pattern matches are marked.
- * @param {string[]} names
- * @param {RegExp | null} [pattern]
- */
-export function renderChips(names, pattern = null) {
-  const chips = el("div", "chips");
-  for (const name of names) {
-    const chip = el("span", "chip", name);
-    if (pattern && pattern.test(name)) chip.classList.add("on");
-    chips.append(chip);
-  }
-  return chips;
-}
-
-/** @param {[string, string][]} entries */
-function renderFacts(entries) {
-  const list = el("dl", "facts");
-  for (const [key, value] of entries) list.append(el("dt", "", key), el("dd", "", value));
-  return list;
-}
 
 /**
  * A collapsible box with a title, a count and lines of text.
@@ -146,7 +124,7 @@ export function renderVariant(data, index, {feature = null, device = null, onFea
   const relocated = variant.relocated || [];
   if (relocated.length) {
     wrap.append(renderBox("Moved, but the same bit field",
-      `${relocated.length} relocation${relocated.length === 1 ? "" : "s"}`,
+      plural(relocated.length, "relocation"),
       "Same name inside the same register, but at another bit position. A CMSIS header hides this " +
       "behind its _Pos and _Msk macros, so these were merged and the field is drawn at every position.",
       [renderLines(relocated, 200)]));

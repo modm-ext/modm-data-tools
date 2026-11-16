@@ -5,8 +5,8 @@
 // decoded into its fields. It only draws the register it gets, so the MCP server can show it too.
 // Styles: ../shared/theme.css and register-view.css.
 
-import {el} from "../shared/util.js";
-import {ACCESS, WRITES, bitRange, bitsValue, fieldValue, hexBits} from "./parse.js";
+import {el, hexBits} from "../shared/util.js";
+import {ACCESS, WRITES, bitRange, bitsValue, fieldValue} from "./parse.js";
 
 /** @typedef {import("./parse.js").Node} Node */
 

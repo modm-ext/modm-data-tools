@@ -5,7 +5,7 @@
 // details, with the selection in the URL hash.
 
 import "../shared/site.js";
-import {$, el, loadJSON, modes, num, regex, select} from "../shared/util.js";
+import {$, el, loadJSON, modes, num, plural, regex, select} from "../shared/util.js";
 import {parseHash, sortGroups, usedBy} from "./model.js";
 import {renderDetails, renderLegend, renderVariant} from "./variant-view.js";
 import {renderMap} from "./map-view.js";
@@ -87,8 +87,7 @@ function renderGroup() {
   $("g-name").textContent = data.name;
   $("g-sub").textContent =
     `${num(data.instances)} instances on ${num(data.devices.length)} devices, ` +
-    `${num(maps)} distinct register maps, ${data.variants.length} ` +
-    `${data.variants.length === 1 ? "variant" : "variants"}` +
+    `${num(maps)} distinct register maps, ${plural(data.variants.length, "variant")}` +
     (data.ignored && data.ignored.length ? ` · not compared: ${data.ignored.join(", ")}` : "");
 
   const pattern = device();

@@ -53,3 +53,7 @@
   border-color: var(--rule-strong);
   background: repeating-linear-gradient(135deg, var(--hatch) 0 1px, var(--periph) 1px 4px);
 }
+
+/* A register in the card shows its bit fields, 16 bits per row need the room */
+.map-card:has(.register-view) { width: min(440px, calc(100% - 92px)); }
+.details .register-view figcaption { display: none; }

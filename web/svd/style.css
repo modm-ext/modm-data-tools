@@ -35,8 +35,7 @@
   margin: 0; font-size: 11px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
 }
 .menu-count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.menu .search { flex: none; margin-inline: 10px; font-size: 13px; padding-inline: 8px; }
-.menu .search input { padding: 6px 4px; }
+.menu .search { flex: none; margin-inline: 10px; }
 .menu-list { list-style: none; margin: 0; padding: 0 0 8px; overflow: auto; flex: 1; min-height: 0; }
 .menu-group {
   position: sticky; top: 0; background: var(--surface);
@@ -67,19 +66,7 @@
 .tab + .tab { border-left: 1px solid var(--rule-strong); }
 .tab:hover { color: var(--ink); background: var(--hover); }
 .tab[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
-.search {
-  flex: 1 1 320px; min-width: 0; display: flex; align-items: center;
-  background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px;
-  font-family: var(--font-mono); font-size: 14px; padding-inline: 10px;
-}
-.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.search.invalid { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
-.delim { color: var(--faint); user-select: none; }
-.search input {
-  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink);
-  font: inherit; padding: 7px 4px;
-}
-.search input::placeholder { color: var(--faint); }
+.tools .search { flex: 1 1 320px; background: var(--surface); font-size: 14px; padding-inline: 10px; }
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; cursor: pointer; }
 .check input { accent-color: var(--accent); margin: 0; }
 .check select {

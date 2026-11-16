@@ -5,6 +5,7 @@
 // modm_data.clocks and modm_data_tools.clocks in a Pyodide worker (py.js), the graph is graph-view.js.
 
 import "../shared/site.js";
+import {$ as byId, clamp, h as el} from "../shared/util.js";
 import * as py from "./py.js";
 import {activePath, focusOf, fmtHz, humanError, label, short} from "./model.js";
 import {createClockGraph} from "./graph-view.js";
@@ -12,12 +13,8 @@ import {createClockGraph} from "./graph-view.js";
 /** @typedef {import("./model.js").Tree} Tree */
 /** @typedef {import("./model.js").Result} Result */
 
-const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
-const el = (/** @type {string} */ tag, /** @type {Record<string, any>} */ props = {}, /** @type {(Node | string)[]} */ ...children) => {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...children);
-  return e;
-};
+// The page reads and sets the values of its inputs directly
+const $ = /** @type {(id: string) => any} */ (byId);
 
 const state = {
   /** @type {string | null} */ device: null,
@@ -85,7 +82,7 @@ async function start() {
   $("sidebtn").onclick = () => side(!document.body.classList.contains("noside"));
   // Drag the grip to resize the panel, the width is remembered like the panel itself
   const width = (/** @type {number} */ px) => {
-    document.body.style.setProperty("--side", `${Math.round(Math.min(innerWidth - 200, Math.max(240, px)))}px`);
+    document.body.style.setProperty("--side", `${Math.round(clamp(px, 240, innerWidth - 200))}px`);
   };
   $("grip").onpointerdown = (/** @type {PointerEvent} */ e) => {
     const grip = $("grip");

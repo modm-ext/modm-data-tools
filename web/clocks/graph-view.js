@@ -7,6 +7,7 @@
 // the page passes the evaluation result and its choices in, and gets the user's changes as callbacks.
 // Styles: graph-view.css.
 
+import {clamp, h as el} from "../shared/util.js";
 import {
   KIND, fmtHz, fold, humanError, inputValue, isVariable, factorsOf, label, limitText, mhz, settingOf,
 } from "./model.js";
@@ -31,12 +32,6 @@ import {
  * @property {Set<string> | null} [nodes] the nodes to show, all if null
  * @property {Set<string>} [alternatives] further nodes shown dimmed, e.g. the other inputs of muxes on a path
  */
-
-const el = (/** @type {string} */ tag, /** @type {Record<string, any>} */ props = {}, /** @type {(Node | string)[]} */ ...children) => {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...children);
-  return e;
-};
 
 /**
  * Creates the graph in the container (which needs a height) and returns its controller.
@@ -220,7 +215,7 @@ export function createClockGraph(container, tree, options = {}) {
       if (factors.length > 64 && node.range) {
         const [lo, hi] = node.range;
         const input = el("input", {type: "number", min: lo, max: hi, value: now ?? "", title: `${sign} ${lo}…${hi}`});
-        input.onchange = () => choose(Math.min(hi, Math.max(lo, Math.round(Number(input.value)))));
+        input.onchange = () => choose(clamp(Math.round(Number(input.value)), lo, hi));
         return el("span", {className: "row", style: "margin:0;flex:1"}, el("span", {className: "lbl", textContent: sign}), input);
       }
     }
@@ -341,7 +336,7 @@ export function createClockGraph(container, tree, options = {}) {
     });
   };
   function zoomAt(/** @type {number} */ k, /** @type {number} */ px, /** @type {number} */ py) {
-    k = Math.min(2.5, Math.max(0.15, k));
+    k = clamp(k, 0.15, 2.5);
     camera.x = px - (px - camera.x) * (k / camera.k);
     camera.y = py - (py - camera.y) * (k / camera.k);
     camera.k = k;
@@ -350,7 +345,7 @@ export function createClockGraph(container, tree, options = {}) {
   function fit() {
     const stage = container.getBoundingClientRect();
     const w = parseFloat(world.style.width) || 1000, h = parseFloat(world.style.height) || 800;
-    camera.k = Math.min(1.2, Math.max(0.15, Math.min(stage.width / w, stage.height / h)));
+    camera.k = clamp(Math.min(stage.width / w, stage.height / h), 0.15, 1.2);
     camera.x = (stage.width - w * camera.k) / 2;
     camera.y = Math.max(0, (stage.height - h * camera.k) / 2);
     applyView();

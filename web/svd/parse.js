@@ -5,7 +5,7 @@
 // the regular expression filter over that tree and the number formats the views share.
 // No DOM access except the XML document it reads, so the MCP server and tests can use it too.
 
-import {hex} from "../shared/util.js";
+import {hex, hexBits, plural} from "../shared/util.js";
 
 /**
  * @typedef {"peripheral" | "cluster" | "register" | "field" | "enum"} NodeType
@@ -303,10 +303,11 @@ export function filterDevice(device, query, {cased = false, desc = false} = {}) 
   const matches = (/** @type {Node} */ node) => {
     if (re.test(node.name)) return true;
     if (node.path.length > node.name.length) {
-      // Dotted paths like USART1.CR1.UE match when the match ends in the last segment
+      // Dotted paths like USART1.CR1.UE match when the match ends in the last segment, or right
+      // before it, so that USART1\.CR1\. matches the fields of USART1.CR1
       const start = node.path.length - node.name.length;
       for (const m of node.path.matchAll(reG)) {
-        if (m[0].length && /** @type {number} */ (m.index) + m[0].length > start) return true;
+        if (m[0].length && /** @type {number} */ (m.index) + m[0].length >= start) return true;
       }
     }
     return desc && !!node.desc && re.test(node.desc);
@@ -326,8 +327,6 @@ export function filterDevice(device, query, {cased = false, desc = false} = {}) 
 }
 
 /* ----------------------------------------------------------------- Formatting */
-/** A hexadecimal number with the digits of a value of this many bits, e.g. 0x0000ABCD. */
-export const hexBits = (/** @type {number | bigint} */ value, /** @type {number} */ bits) => hex(/** @type {number} */ (value), Math.max(1, Math.ceil(bits / 4)));
 /** The offset of a register in its peripheral, e.g. +0x1C. */
 export const offsetText = (/** @type {number} */ value) => "+" + hex(value, 2);
 /** A field value: one bit as 0 or 1, up to four bits in binary, otherwise hexadecimal. */
@@ -338,7 +337,6 @@ export const bitsValue = (/** @type {number} */ value, /** @type {number} */ wid
 };
 /** The bits of a field, e.g. [7:4] or [3]. */
 export const bitRange = (/** @type {Node} */ field) => (field.msb === field.lsb ? `[${field.lsb}]` : `[${field.msb}:${field.lsb}]`);
-export const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 /** A size in bytes, KiB or MiB. */
 export const sizeText = (/** @type {number} */ bytes) => {
   if (bytes >= 1048576 && bytes % 1048576 === 0) return `${bytes / 1048576} MiB`;
@@ -349,6 +347,3 @@ export const sizeText = (/** @type {number} */ bytes) => {
 /** The number of descendants of a type, e.g. the registers of a peripheral. */
 export const countOf = (/** @type {Node} */ node, /** @type {NodeType} */ type) =>
   node.children.reduce((/** @type {number} */ n, c) => n + (c.type === type ? 1 : 0) + countOf(c, type), 0);
-/** HTML escaped text, for views that build their rows as markup. */
-export const esc = (/** @type {unknown} */ s) =>
-  String(s ?? "").replace(/[&<>"]/g, (c) => /** @type {Record<string, string>} */ ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);

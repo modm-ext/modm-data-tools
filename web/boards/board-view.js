@@ -5,7 +5,7 @@
 // They take the board data and draw into an element, nothing else, so other pages and the
 // MCP server can show them too. Styles: ../shared/theme.css and board-view.css.
 
-import {el} from "../shared/util.js";
+import {el, renderChips, renderFacts} from "../shared/util.js";
 import {PAIRED, bridges, connectors, own, used} from "./model.js";
 
 /** @typedef {import("./model.js").Board} Board */
@@ -150,26 +150,21 @@ export function renderPinDetails(board, name, number, pattern = null) {
   const pin = board.connectors[name].pins[number];
   const box = el("div", "pin-details");
   box.append(el("h3", "", `${pin.signal}`), el("div", "sub", `${board.board} ${name}-${number}`));
-  const list = el("dl", "facts");
-  const add = (/** @type {string} */ term, /** @type {string | undefined} */ value) => {
-    if (value) list.append(el("dt", "", term), el("dd", "", value));
-  };
   const use = used(board, pin);
-  add("kind", pin.kind);
-  if (use) {
-    add("used for", [use.use, use.label].filter(Boolean).join(": "));
-    add("used as", use.signal);
-    add("wired to", use.part);
-  }
-  add("label", pin.label);
-  add("net", pin.net);
-  add("function", pin.function);
-  add("bridge", pin.bridge);
-  add("remark", pin.remark);
-  add("manual", pin.pin);
-  add("device", board.device);
-  add("source", board.document);
-  box.append(list);
+  box.append(renderFacts([
+    ["kind", pin.kind],
+    ["used for", use && [use.use, use.label].filter(Boolean).join(": ")],
+    ["used as", use?.signal],
+    ["wired to", use?.part],
+    ["label", pin.label],
+    ["net", pin.net],
+    ["function", pin.function],
+    ["bridge", pin.bridge],
+    ["remark", pin.remark],
+    ["manual", pin.pin],
+    ["device", board.device],
+    ["source", board.document],
+  ]));
   for (const bridge of bridges(board, pin)) {
     box.append(el("hr"));
     const block = el("div", "bridge");
@@ -187,16 +182,10 @@ export function renderPinDetails(board, name, number, pattern = null) {
     }
     box.append(block);
   }
-  const functions = Object.entries(board.signals[pin.signal] || {});
-  if (functions.length) {
-    box.append(el("hr"));
-    const chips = el("div", "chips");
-    for (const [signal, af] of functions) {
-      const chip = el("span", "chip", af === null ? signal : `AF${af} ${signal}`);
-      if (pattern && pattern.test(signal)) chip.classList.add("on");
-      chips.append(chip);
-    }
-    box.append(chips);
+  const functions = board.signals[pin.signal] || {};
+  if (Object.keys(functions).length) {
+    const af = (/** @type {string} */ signal) => (functions[signal] === null ? signal : `AF${functions[signal]} ${signal}`);
+    box.append(el("hr"), renderChips(Object.keys(functions), pattern, af));
   } else if (pin.kind === "gpio") {
     box.append(el("p", "", "No alternate function data for this device."));
   }

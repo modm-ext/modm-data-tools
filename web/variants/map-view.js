@@ -6,7 +6,7 @@
 // variant data and draws into a container, nothing else, so other pages and the MCP server can
 // show it too. Colours come from the CSS variables of ../shared/theme.css and variant-view.css.
 
-import {el} from "../shared/util.js";
+import {clamp, el} from "../shared/util.js";
 import {accessTag, describe, hue, label, layout, matches, offset} from "./model.js";
 
 /** @typedef {import("./model.js").Variant} Variant */
@@ -23,9 +23,6 @@ const ROW_RATIO = 2;           // a bit is this many times taller than it is wid
 const K_MIN = 1, K_MAX = 90;   // pixels per bit
 const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
 const FONT_SANS = '"IBM Plex Sans", system-ui, -apple-system, sans-serif';
-
-const clamp = (/** @type {number} */ value, /** @type {number} */ low, /** @type {number} */ high) =>
-  Math.min(Math.max(value, low), high);
 
 /** @type {Map<string, number>} */
 const widths = new Map();

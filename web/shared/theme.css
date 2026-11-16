@@ -186,6 +186,22 @@ input[type="search"], input[type="text"], input[type="number"], select {
 }
 input.bad { border-color: var(--error); }
 
+/* A regular expression field: <div class="search"><span class="delim">/</span><input type="search">
+ * <span class="delim">/i</span></div>, invalid with the class "invalid" or an input.bad */
+.search {
+  min-width: 0; display: flex; align-items: center;
+  background: var(--band); border: 1px solid var(--rule-strong); border-radius: var(--radius-s);
+  font: 13px var(--font-mono); padding-inline: 8px;
+}
+.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.search.invalid, .search:has(input.bad) { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+.search .delim { color: var(--faint); user-select: none; }
+.search input {
+  flex: 1; width: auto; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink);
+  font: inherit; padding: 6px 4px;
+}
+.search input::placeholder { color: var(--faint); }
+
 .btn {
   font: 500 13px/1 var(--font-sans); color: var(--ink);
   background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px;

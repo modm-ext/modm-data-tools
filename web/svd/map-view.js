@@ -7,8 +7,9 @@
 // Neither knows about the page around them. Styles: ../shared/theme.css, register-view.css
 // (access colours) and map-view.css.
 
-import {el} from "../shared/util.js";
-import {ACCESS, WRITES, bitRange, bitsValue, countOf, esc, hexBits, offsetText, plural, sizeText} from "./parse.js";
+import {clamp, el, esc, hexBits, plural} from "../shared/util.js";
+import {ACCESS, WRITES, bitRange, bitsValue, countOf, offsetText, sizeText} from "./parse.js";
+import {renderRegister} from "./register-view.js";
 
 /** @typedef {import("./parse.js").Device} Device */
 /** @typedef {import("./parse.js").Node} Node */
@@ -38,7 +39,6 @@ const K_MAX = 360;
 const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
 const FONT_SANS = '"IBM Plex Sans", system-ui, -apple-system, sans-serif';
 
-const clamp = (/** @type {number} */ value, /** @type {number} */ lo, /** @type {number} */ hi) => Math.min(hi, Math.max(lo, value));
 const registerBytes = (/** @type {Node} */ node) => {
   const bytes = Math.max(1, Math.ceil((node.size || 32) / 8));
   return node.dim ? (node.dim - 1) * Math.max(node.increment || 0, bytes) + bytes : bytes;
@@ -1120,5 +1120,7 @@ export function renderDetails(node, layout = null) {
     (node.desc ? `<p class="card-desc">${esc(node.desc)}</p>` : "") +
     `<div class="card-actions"><button class="btn" type="button" data-action="zoom">Zoom to</button>` +
     `<button class="btn" type="button" data-action="table">Show in table</button></div>`;
+  // The bit fields with their reset values below the buttons, the card already names the register
+  if (node.type === "register" && node.children.length) box.append(renderRegister(node));
   return box;
 }

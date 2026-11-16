@@ -27,8 +27,8 @@
 <div class="shell">
   <nav class="panel" aria-label="Filter and compatible sets">
     <div class="side-head">
-      <input id="filter" type="search" placeholder="pin, function, use or bridge, e.g. ^SPI\d_SCK$|PA5|RMII|^SB13$" aria-label="Filter pins and alternate functions by regular expression" autocomplete="off" spellcheck="false">
-      <input id="board" type="search" placeholder="boards, e.g. F4|L4|DISCO|-DK" aria-label="Filter boards by regular expression" autocomplete="off" spellcheck="false">
+      <div class="search"><span class="delim" aria-hidden="true">/</span><input id="filter" type="search" placeholder="pin, function, use or bridge, e.g. ^SPI\d_SCK$|PA5|RMII|^SB13$" aria-label="Filter pins and alternate functions by regular expression" autocomplete="off" spellcheck="false"><span class="delim" aria-hidden="true">/i</span></div>
+      <div class="search"><span class="delim" aria-hidden="true">/</span><input id="board" type="search" placeholder="boards, e.g. F4|L4|DISCO|-DK" aria-label="Filter boards by regular expression" autocomplete="off" spellcheck="false"><span class="delim" aria-hidden="true">/i</span></div>
       <label id="l-free">Pins</label>
       <div class="modes" id="free" role="group" aria-labelledby="l-free">
         <button type="button" data-free="" aria-pressed="true">all<span>on the headers</span></button>
