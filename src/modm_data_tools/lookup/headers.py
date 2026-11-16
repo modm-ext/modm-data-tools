@@ -27,6 +27,8 @@ _connections = threading.local()
 def _devices() -> sqlite3.Connection:
     """devices.db, read-only, one connection per thread since the MCP server runs tool calls in parallel"""
     if getattr(_connections, "db", None) is None:
+        if not DB.exists():
+            raise UserError(f"{DB} is missing, build it in modm-data with `make build-device-database`")
         _connections.db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     return _connections.db
 

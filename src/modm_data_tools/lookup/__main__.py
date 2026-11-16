@@ -18,7 +18,7 @@ from .tools import TOOLS, message
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m modm_data_tools.lookup",
+        prog="modm-data-lookup",
         description="STM32 headers, registers and documentation from modm-data.",
     )
     commands = parser.add_subparsers(dest="tool", required=True, metavar="tool")

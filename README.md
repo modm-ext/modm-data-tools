@@ -10,6 +10,8 @@ modm-data generates the data in a stable format, the tools here only read it.
   shared by the `clock_solve` lookup and the clock solver page.
 - `web/`: the interactive pages of [data.modm.dev](https://data.modm.dev).
 
+The user documentation is at [data.modm.dev/tools](https://data.modm.dev/tools/) (`web/tools/`).
+
 ## Installation
 
 The lookups read the data in the `ext/` folder of a modm-data checkout, so install
@@ -20,9 +22,12 @@ git clone https://github.com/modm-io/modm-data.git ../modm-data
 make venv  # .venv with both editable, MODM_DATA=../modm-data by default
 ```
 
-Most data comes from public sources that modm-data downloads with `make` (see its README).
-The documentation and the CubeMX database are not redistributable: download the PDFs and
-convert them with modm-data yourself.
+The CMSIS headers and the SVD files come from public sources that modm-data downloads
+with `make` (see its README). Every lookup that takes a device name also needs
+`ext/modm-data/devices.db`, which modm-data builds from the STM32CubeMX database, and the
+documents, figures, clock trees and board pinouts need the CubeMX database and the
+documentation converted to HTML. Both are not redistributable: download them and convert
+them with modm-data yourself.
 
 ## Lookups
 

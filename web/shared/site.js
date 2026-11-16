@@ -13,6 +13,7 @@ export const PAGES = [
   ["boards", "Board Pinouts"],
   ["pinout", "Pin Mapping"],
   ["clocks", "Clock Solver"],
+  ["tools", "Tools"],
 ];
 
 /** @param {HTMLElement} nav */
