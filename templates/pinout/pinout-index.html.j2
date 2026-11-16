@@ -1,42 +1,36 @@
 <!doctype html>
+{% set root = stylesheet_href | replace("assets/styles/pinout.css", "") ~ "../" %}
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>modm Pin Mapping Search</title>
+  <link rel="stylesheet" href="{{ root }}shared/theme.css">
   <link rel="stylesheet" href="{{ stylesheet_href }}">
+  <script type="module" src="{{ root }}shared/site.js"></script>
 </head>
-<body>
-  <main class="page">
-    <section class="search-shell" aria-label="Device search">
-      <div class="search-panel">
-        <h1 class="title">modm Pin Mapping</h1>
-        <p class="search-copy">Type any part of the device, package, or pin count. Substring and fuzzy matches are supported.</p>
-        <form class="search-form" id="device-search-form" autocomplete="off">
-          <label class="search-label" for="device-search-input">Device</label>
-          <input
-            id="device-search-input"
-            class="search-input"
-            type="search"
-            placeholder="stm32f407 lqfp100"
-            spellcheck="false"
-            autofocus
-          >
-          <label class="search-label" for="device-search-results">Matches</label>
-          <select id="device-search-results" class="search-results" size="12"></select>
-          <div class="search-meta" id="device-search-meta">{{ device_count }} devices indexed{% if generated_at %} | Generated {{ generated_at }}{% endif %}</div>
-          <button class="search-button" type="submit">Open device page</button>
-        </form>
-        <div class="search-footer">
-          <a
-            class="repo-cta repo-cta-footer"
-            href="https://github.com/modm-io/modm-data"
-            target="_blank"
-            rel="noreferrer"
-          >Found bugs? Want features? Contribute!</a>
-        </div>
-      </div>
-    </section>
+<body class="app pinout" data-page="pinout">
+  <nav class="site" aria-label="modm-data pages"></nav>
+
+  <header class="top">
+    <div>
+      <h1>Pin Mapping</h1>
+      <p class="sub">Map the pins of a device to functions with regex columns, then share or export the result{% if generated_at %} · generated {{ generated_at }}{% endif %}</p>
+    </div>
+    <div class="totals">
+      <div class="total"><b>{{ device_count }}</b><span>devices</span></div>
+    </div>
+  </header>
+
+  <main class="panel search">
+    <form id="device-search-form" autocomplete="off">
+      <label class="label" for="device-search-input">Device</label>
+      <input id="device-search-input" type="search" placeholder="stm32f407 lqfp100" spellcheck="false" autofocus>
+      <p class="hint">Type any part of the device, package, or pin count. Substring and fuzzy matches are supported.</p>
+      <label class="label" for="device-search-results">Matches <span id="device-search-meta"></span></label>
+      <select id="device-search-results" size="16"></select>
+      <button class="btn primary" type="submit">Open device page</button>
+    </form>
   </main>
 
   <script id="device-search-data" type="application/json">{{ devices | tojson }}</script>
