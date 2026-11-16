@@ -64,6 +64,17 @@ layout of the homepage, and `make build-homepage` in modm-data copies the pages 
 the data it generated. The clock solver page runs `modm_data.clocks` and
 `modm_data_tools.clocks` in Pyodide, `export` copies that code next to the page.
 
+Every page follows the same structure, without frameworks or a build step (the browser
+loads the ES modules directly):
+
+- `web/shared/theme.css`: colours in light and dark, fonts, the site bar and common parts.
+  `site.js` fills `<nav class="site">` with the links to all pages, `util.js` has small helpers.
+- `<page>/index.html`: the markup only, `<body class="app" data-page="<page>">`.
+- `<page>/model.js`: the data and its logic without DOM access.
+- `<page>/*-view.js` with its `*-view.css`: views, functions that draw given data into an
+  element and know nothing about the page around them, so the MCP server can show them too.
+- `<page>/app.js` and `style.css`: the page itself, URL hash, inputs and layout.
+
 To work on a page, generate its data in the modm-data checkout and serve the pages on
 top of it, pages in `web/` take precedence:
 
