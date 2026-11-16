@@ -6,7 +6,7 @@
 
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {activePath, factorsOf, focusOf, fmtHz, fold, humanError, isVariable, limitText} from "../../web/clocks/model.js";
+import {activePath, factorsOf, focusOf, fmtHz, fold, humanError, inUnit, isVariable, limitText, unitOf} from "../../web/clocks/model.js";
 
 const domain = (prefix, ...factors) => factors.map((factor) => ({factor, macro: `${prefix}${factor}`}));
 
@@ -154,4 +154,13 @@ test("humanError writes frequencies with a unit and leaves small numbers alone",
   assert.equal(humanError("SYSCLK 1.7e+08 out of range"), "SYSCLK 170 MHz out of range");
   assert.equal(humanError("PLLN factor 87 not in 8..86"), "PLLN factor 87 not in 8..86");
   assert.equal(humanError("LSE 32768"), "LSE 32.768 kHz");
+});
+
+test("input fields of slow clocks in kHz", () => {
+  assert.deepEqual(unitOf(32000), ["kHz", 1e3]);
+  assert.deepEqual(unitOf(8e6), ["MHz", 1e6]);
+  assert.deepEqual(unitOf(undefined), ["MHz", 1e6]);
+  assert.equal(inUnit(32768, 1e3), "32.768");
+  assert.equal(inUnit(170e6, 1e6), "170");
+  assert.equal(inUnit(undefined, 1e6), "");
 });
