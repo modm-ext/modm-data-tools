@@ -151,10 +151,12 @@ def _name_sources(name: str, acronym: str, description: str, instances: set[str]
             found.add("RAMECC1")
         else:
             prev = prev if tok.isdigit() else None
-    for ctl, _, a, b in re.findall(r"((?:GP|HP|LP)?B?DMA\d?)_(Channel|Ch|Stream|CH)(\d+)(?:_(\d+))?", name):
-        for n in range(int(a), int(b or a) + 1):
+    # 'Channel2_3', 'Ch4_7' (a range) and 'Channel4_5_6_7' (a list) all span the first to the last number
+    for ctl, _, chans in re.findall(r"((?:GP|HP|LP)?B?DMA\d?)_(Channel|Ch|Stream|CH)(\d+(?:_\d+)*)", name):
+        nums = [int(n) for n in chans.split("_")]
+        for n in range(nums[0], nums[-1] + 1):
             found.add(f"{ctl}#{n}")
-    for ctl, chans in re.findall(r"(DMA\d) channels? ([\d, ]+)", description):
+    for ctl, chans in re.findall(r"(DMA\d) channels? ([\d, ]+(?:and \d+)?)", description):
         for n in re.findall(r"\d+", chans):
             found.add(f"{ctl}#{n}")
     return found

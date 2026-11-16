@@ -19,10 +19,15 @@ from pathlib import Path
 from . import curves, graph, timing
 
 
+def _num(v: float, a, spec: str = "g") -> str:
+    """A value of axis a, float noise of the axis fit next to 0 snapped to 0"""
+    return format(0.0 if abs(v) < 1e-9 * abs(a.range[1] - a.range[0]) else v, spec)
+
+
 def _chart_text(plot, x: list[float]) -> str:
     def axis(name, a):
         low, high = a.range
-        return f"{name}: {a.title or '(no title)'}, {a.scale}, {low:g} to {high:g}"
+        return f"{name}: {a.title or '(no title)'}, {a.scale}, {_num(low, a)} to {_num(high, a)}"
 
     lines = [axis("x", plot.x), axis("y", plot.y), "typical characterization data, not guaranteed values"]
     for c in plot.curves:
@@ -33,15 +38,18 @@ def _chart_text(plot, x: list[float]) -> str:
             values = []
             for v in x:
                 try:
-                    values.append(f"y({v:g}) = {c(v):.4g}")
+                    values.append(f"y({v:g}) = {_num(c(v), plot.y, '.4g')}")
                 except ValueError:
-                    values.append(f"y({v:g}) outside {min(xs):g}..{max(xs):g}")
+                    values.append(f"y({v:g}) outside {_num(min(xs), plot.x)}..{_num(max(xs), plot.x)}")
             lines.append(f"{kind} {label}: " + ", ".join(values))
         else:
             # About 12 points per curve, which shows its shape; ask for x for exact values
             step = max(1, len(c.points) // 12)
             points = c.points[::step] + ([c.points[-1]] if (len(c.points) - 1) % step else [])
-            lines.append(f"{kind} {label}: " + " ".join(f"({px:.4g}, {py:.4g})" for px, py in points))
+            lines.append(
+                f"{kind} {label}: "
+                + " ".join(f"({_num(px, plot.x, '.4g')}, {_num(py, plot.y, '.4g')})" for px, py in points)
+            )
     return "\n".join(lines)
 
 

@@ -9,7 +9,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pytest
 
 from modm_data_tools.figures import curves, figure_data, graph, timing
 
@@ -225,11 +224,6 @@ class Figures(unittest.TestCase):
         assert "x: Temperature (°C), linear, 0 to 100" in text
         assert "curve VDD = 3.3 V: y(50) = 2, y(150) outside " in text, text
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="bug: figures._chart_text formats the curve range with :g, so the float noise of the axis fit shows as "
-        "'y(150) outside -2.84217e-14..100' instead of '0..100'",
-    )
     def test_chart_range_text(self):
         """The x range of a curve in the text of a value outside of it"""
         _, text, _ = figure_data(self.svg(_chart()), "Current consumption vs. temperature", [150])

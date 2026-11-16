@@ -10,7 +10,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import pytest
 
 from modm_data_tools.irq import graph, interconnect, sources
 from modm_data_tools.lookup import docs, headers
@@ -203,11 +202,6 @@ class Pairing(unittest.TestCase):
             "DMA1#7",
         }
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="bug: _name_sources reads DMA1_Channel4_5_6_7 as the range 4..5 and stops a channel list at 'and', so "
-        "on stm32f072rb the DMA1 channel 6/7 events match three vectors and are dropped from the HAL data",
-    )
     def test_name_sources_dma_channel_lists(self):
         """Every channel of DMA1_Channel4_5_6_7 (F072 header) and of 'channel 4, 5, 6, and 7' (RM0490)"""
         all4to7 = {"DMA1", "DMA1#4", "DMA1#5", "DMA1#6", "DMA1#7"}
