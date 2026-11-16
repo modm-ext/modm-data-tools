@@ -320,6 +320,12 @@ def clock_solve(device: str, targets: str, config: str = "", use: str = "", lock
     `lock`: nodes the solver must not move. `code`: the modm Board::SystemClock struct for the result.
     Work iteratively: start with the core (SYSCLK=max), pass the returned config back with more targets.
     Derived from CubeMX (ST SLA), do not publish."""
+    return _solve(device, targets, config, use, lock, code)[0]
+
+
+def _solve(device: str, targets: str, config: str = "", use: str = "", lock: str = "", code: bool = False):
+    """The text of clock_solve and the solution for the MCP app: {partname, tree, result, targets: {id: Hz}, use,
+    config}"""
     from ..clocks.configure import report, solve_text
     from ..clocks.modm import generate
     from ..clocks.modm_api import api_of
@@ -339,4 +345,7 @@ def clock_solve(device: str, targets: str, config: str = "", use: str = "", lock
     elif code:
         source = "// no code without a solution"
     header = f"{partname} (first of {len(matches)} CubeMX devices for '{device}')" if len(matches) > 1 else partname
-    return report(tree, solved, header, source)
+    result = solved["result"]
+    view = {"partname": partname, "tree": tree, "result": result, "use": solved["use"], "config": solved["config"],
+            "targets": {n: result[n]["freq"] for n in solved["targets"] if n in result}}  # fmt: skip
+    return report(tree, solved, header, source), view

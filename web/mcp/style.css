@@ -1,0 +1,13 @@
+/* Copyright 2026, Niklas Hauser
+ * SPDX-License-Identifier: MPL-2.0
+ * The MCP apps of web/mcp on top of ../shared/theme.css and the styles of their views. */
+
+html, body { height: auto; }
+body { background: var(--surface); }
+.mcp-app { padding: 8px; display: grid; gap: 12px; }
+.mcp-caption, .mcp-note, .mcp-error { margin: 0; color: var(--muted); font-size: 13px; }
+.mcp-error { color: var(--error); }
+.mcp-text { margin: 0; white-space: pre-wrap; font-size: 12px; }
+/* inline cards take the height of their content, the graph needs a fixed one */
+.mcp-stage { height: 480px; border: 1px solid var(--rule); border-radius: var(--radius-s); }
+[data-mode="fullscreen"] .mcp-stage { height: calc(100vh - 60px); }

@@ -4,16 +4,24 @@
 """The MCP server and the CLI around the lookup functions: registration, errors, reload and the shared HTTP app."""
 
 import asyncio
+import base64
 import contextlib
+import gzip
 import inspect
 import io
+import json
+import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from modm_data_tools.errors import UserError
-from modm_data_tools.lookup import docs, headers, mcp, tools
+from modm_data_tools.lookup import apps, clocks, docs, headers, mcp, svd, tools
 from modm_data_tools.lookup.__main__ import _parser, main as cli
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -157,6 +165,125 @@ class Http(unittest.TestCase):
         )
         assert [c.type for c in result.content] == ["text", "image"], result.content
         assert result.content[0].text.endswith("px") and result.structured_content is None, result
+
+
+class Apps(unittest.TestCase):
+    """The MCP apps of decode_register and clock_solve behind MODM_DATA_MCP_APPS, on a server of their own"""
+
+    HEADERS = Http.HEADERS
+    UI = {"decode_register": "ui://modm-data/register.html", "clock_solve": "ui://modm-data/clocks.html"}
+    CALLS = {
+        "decode_register": {"device": "stm32g474re", "register": "RCC.CR", "value": "0x03030500"},
+        "clock_solve": {"device": "STM32G474RETx", "targets": "SYSCLK=max"},
+    }
+
+    @contextlib.contextmanager
+    def client(self, on: bool):
+        from mcp.server.mcpserver import MCPServer
+        from starlette.testclient import TestClient
+
+        with mock.patch.dict(os.environ, {"MODM_DATA_MCP_APPS": "1" if on else ""}):
+            server = MCPServer("modm-data")
+            tools.register(server)
+        app = server.streamable_http_app(stateless_http=True, json_response=True)
+        with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+            yield lambda method, params=None: Http.post(self, client, method, params)
+
+    def test_off(self):
+        """Without the flag nothing changes: no ui:// resources, no _meta on the tools"""
+        with self.client(on=False) as post:
+            assert post("resources/list")["resources"] == []
+            assert all("_meta" not in t for t in post("tools/list")["tools"])
+
+    def test_on(self):
+        """With the flag both tools link to their page, the pages are one HTML file each with the views inlined"""
+        with self.client(on=False) as post:
+            schemas = {t["name"]: t["inputSchema"] for t in post("tools/list")["tools"]}
+        with self.client(on=True) as post:
+            found = {t["name"]: t for t in post("tools/list")["tools"]}
+            assert {n: t["_meta"]["ui"]["resourceUri"] for n, t in found.items() if "_meta" in t} == self.UI
+            assert {n: t["inputSchema"] for n, t in found.items()} == schemas
+            assert all("outputSchema" not in t for t in found.values())
+            resources = {r["uri"]: r for r in post("resources/list")["resources"]}
+            assert set(resources) == set(self.UI.values()), resources
+            for uri, view in zip(self.UI.values(), ("renderRegister", "createClockGraph")):
+                assert resources[uri]["mimeType"] == "text/html;profile=mcp-app"
+                (content,) = post("resources/read", {"uri": uri})["contents"]
+                assert content["mimeType"] == "text/html;profile=mcp-app", content
+                assert "https://unpkg.com" in content["_meta"]["ui"]["csp"]["resourceDomains"]
+                html = content["text"]
+                # all of the Google Fonts import is gone, a rest of it would break the CSS after it
+                assert f"function {view}(" in html and "@import" not in html and "display=swap" not in html
+                script = re.search(r'<script type="module">\n(.*)\n</script>', html, re.S)[1]
+                # only the import of the App client from the CDN is left
+                assert re.findall(r"^\s*(?:import|export)\b.*", script, re.M) == [
+                    'import {App} from "https://unpkg.com/@modelcontextprotocol/ext-apps@1.7.5/dist/src/app-with-deps.js";'
+                ]
+                if shutil.which("node"):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        (Path(tmp) / "app.mjs").write_text(script)
+                        out = subprocess.run(["node", "--check", Path(tmp) / "app.mjs"], capture_output=True, text=True)
+                        assert out.returncode == 0, out.stderr
+
+    @unittest.skipUnless(HAS_DATA, "needs ext/modm-data/devices.db and the HTML archive")
+    def test_results(self):
+        """The text stays byte for byte the same, the data of the view is in _meta only"""
+        results = {}
+        for on in (False, True):
+            with self.client(on=on) as post:
+                results[on] = {n: post("tools/call", {"name": n, "arguments": a}) for n, a in self.CALLS.items()}
+        for name in self.CALLS:
+            off, on = results[False][name], results[True][name]
+            assert "_meta" not in off and "structuredContent" not in off and "structuredContent" not in on, on
+            assert off["content"] == on["content"] and len(on["content"]) == 1, (off, on)
+        assert results[False]["decode_register"]["content"][0]["text"] == svd.decode_register(
+            **self.CALLS["decode_register"]
+        )
+
+        view = results[True]["decode_register"]["_meta"][apps.KEY]
+        assert view["total"] == 1 and view["registers"][0]["value"] == 0x03030500, view
+        register = view["registers"][0]["register"]
+        assert register["path"] == "RCC.CR" and register["address"] == 0x40021000 and register["size"] == 32
+        fields = {f["name"]: f for f in register["children"]}
+        pllon = {k: fields["PLLON"][k] for k in ("type", "lsb", "msb", "width")}
+        assert pllon == {"type": "field", "lsb": 24, "msb": 24, "width": 1}, fields["PLLON"]
+        (cfgr,) = svd._decode("stm32g474re", "RCC.CFGR")[1]
+        ppre2 = next(f for f in cfgr["register"]["children"] if f["name"] == "PPRE2")
+        assert {"type": "enum", "name": "DIV_2", "value": 4, "desc": "HCLK divided by 2"} in ppre2["children"], ppre2
+
+        view = results[True]["clock_solve"]["_meta"][apps.KEY]
+        assert view["partname"] == "STM32G474RETx", view.keys()
+        assert json.loads(gzip.decompress(base64.b64decode(view["tree"]))) == clocks._tree("STM32G474RETx")
+        assert view["targets"] == {"SysCLKOutput": 170e6} and view["result"]["SysCLKOutput"]["freq"] == 170e6
+        assert view["config"]["SysClkSource"] == "RCC_SYSCLKSOURCE_PLLCLK" and isinstance(view["use"], list)
+
+    def test_bundle(self):
+        """The bundler on a tiny module graph: named and renamed imports work, a re-export fails loudly"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "lib").mkdir()
+            (root / "lib/b.js").write_text(
+                "export const x = 1;\nexport function y() { return 2; }\nconst hidden = 3;\n"
+            )
+            (root / "lib/c.js").write_text('import {x} from "./b.js";\nexport const sum = x + 10;\n')
+            (root / "a.js").write_text(
+                'import {x, y as why} from "./lib/b.js";\nimport {\n  sum,\n} from "./lib/c.js";\n'
+                "console.log(x + why() + sum + typeof hidden);\n"
+            )
+            script = apps.bundle("a.js", root)
+            # b once, before the modules that import it
+            assert script.count("__m['lib/b.js'] =") == 1 and script.index("lib/b.js'] =") < script.index(
+                "lib/c.js'] ="
+            )
+            assert "const {x, y: why} = __m['lib/b.js'];" in script, script
+            if shutil.which("node"):
+                (root / "out.mjs").write_text(script)
+                out = subprocess.run(["node", root / "out.mjs"], capture_output=True, text=True)
+                assert out.stdout == "14undefined\n", out
+            for bad in ('export {x} from "./lib/b.js";', "export default 1;", 'import * as b from "./lib/b.js";'):
+                (root / "a.js").write_text(bad + "\n")
+                with self.assertRaisesRegex(ValueError, "^a.js: the bundler cannot handle"):
+                    apps.bundle("a.js", root)
 
 
 if __name__ == "__main__":

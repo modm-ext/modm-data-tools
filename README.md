@@ -54,6 +54,18 @@ make mcp  # http://127.0.0.1:8765/mcp
 claude mcp add --scope user --transport http modm-data http://127.0.0.1:8765/mcp
 ```
 
+With `MODM_DATA_MCP_APPS=1` (off by default), `decode_register` and `clock_solve` are also
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps): hosts that render apps, like the
+Claude desktop chat and claude.ai, show the register diagram and the active clock path next to the
+answer. Claude Code does not render apps and gets the same text either way; the data of the view
+goes into the `_meta` of the result. The pages are the views of `web/` (`web/mcp/`), bundled into one
+HTML file on every read; they load the ext-apps client from unpkg and dagre from cdnjs. In
+`claude_desktop_config.json`:
+
+```json
+"modm-data": {"command": "/path/to/modm-data-tools/.venv/bin/modm-data-mcp", "env": {"MODM_DATA_MCP_APPS": "1"}}
+```
+
 ## Web Pages
 
 | Page | Source | Data |

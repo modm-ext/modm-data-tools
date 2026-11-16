@@ -178,9 +178,41 @@ def decode_register(device: str, register: str = "", value: str = "") -> str:
     With `value`, every field is decoded with its enumerated value names, and set bits outside of all fields are
     reported. `value` may be the output of OpenOCD's mdw (several lines and words, then `register` can be empty);
     bare numbers are hex like mdw prints them."""
+    return _decode(device, register, value)[0]
+
+
+def _node(peripheral: str, r: dict, address: int) -> dict:
+    """A register in the shape of the Node of web/svd/parse.js, for web/svd/register-view.js"""
+    fields = [
+        {
+            "type": "field",
+            "name": f["name"],
+            "lsb": f["offset"],
+            "msb": f["offset"] + f["width"] - 1,
+            "width": f["width"],
+            "desc": f["description"],
+            "children": [
+                {"type": "enum", "name": n, "value": v, "desc": d} for v, (n, d) in sorted(f["values"].items())
+            ],
+        }
+        for f in r["fields"]
+    ]
+    return {
+        "type": "register",
+        "name": r["name"],
+        "path": f"{peripheral}.{r['name']}",
+        "address": address,
+        "size": r["size"],
+        "desc": r["description"],
+        "children": fields,
+    }
+
+
+def _decode(device: str, register: str = "", value: str = "") -> tuple[str, list[dict]]:
+    """The text of decode_register and the decoded registers as [{register: Node, value}] for the MCP app"""
     name, peripherals = _device(device)
     pairs = _values(value) if value else [(None, None)]
-    out, dump = [], len(pairs) > 1
+    out, views, dump = [], [], len(pairs) > 1
     for address, raw in pairs:
         target = f"0x{address:08X}" if address is not None else register
         if not target:
@@ -208,6 +240,7 @@ def decode_register(device: str, register: str = "", value: str = "") -> str:
             out.append(head)
             if dump and not raw:
                 continue
+            views.append({"register": _node(peripheral, r, start), "value": raw})
             covered, hidden = 0, 0
             for f in r["fields"]:
                 mask = ((1 << f["width"]) - 1) << f["offset"]
@@ -230,4 +263,4 @@ def decode_register(device: str, register: str = "", value: str = "") -> str:
                 out.append(f"  bits outside of all fields are set: 0x{raw & ~covered:08X}")
             if hidden:
                 out.append(f"  ({hidden} other {'field is' if hidden == 1 else 'fields are'} 0)")
-    return "\n".join(l for l in out if l)
+    return "\n".join(l for l in out if l), views

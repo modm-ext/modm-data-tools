@@ -38,6 +38,7 @@
         <li><a href="#mcp-run">Running it</a></li>
         <li><a href="#mcp-claude-code">Claude Code</a></li>
         <li><a href="#mcp-claude-desktop">Claude desktop</a></li>
+        <li><a href="#mcp-apps">Apps</a></li>
         <li><a href="#mcp-other">Other clients</a></li>
         <li><a href="#mcp-tools">Tools</a></li>
         <li><a href="#mcp-errors">Errors</a></li>
@@ -449,6 +450,25 @@ work at the same time: they share one index and one set of caches.</p>
 }</code></pre>
 <p>Add <code>"env": {"MODM_DATA": "/path/to/modm-data"}</code> next to <code>command</code> if the tools should read
 another checkout than the installed one.</p>
+
+<h3 id="mcp-apps">Apps</h3>
+<p>With the environment variable <code>MODM_DATA_MCP_APPS=1</code> (off by default), <code>decode_register</code> and
+<code>clock_solve</code> are also <a href="https://github.com/modelcontextprotocol/ext-apps">MCP Apps</a>: hosts that
+render apps show the decoded registers drawn like in the reference manual, and the active clock path of the solution
+with a button for the whole tree (fullscreen where the host has it). The Claude desktop chat and claude.ai render
+them, Claude Code does not. The model gets the same text either way, the data of the view travels in the
+<code>_meta</code> of the result. In <code>claude_desktop_config.json</code>:</p>
+<pre class="code cmd"><code>{
+  "mcpServers": {
+    "modm-data": {
+      "command": "/path/to/modm-data-tools/.venv/bin/modm-data-mcp",
+      "env": {"MODM_DATA_MCP_APPS": "1"}
+    }
+  }
+}</code></pre>
+<p>The pages are the views of the web pages, bundled into one HTML file each time the host reads them, so edits in
+<code>web/</code> show up after reloading the MCP configuration. They load the ext-apps client from unpkg.com and
+dagre from cdnjs.cloudflare.com, so they need a network connection.</p>
 
 <h3 id="mcp-other">Other clients</h3>
 <p>Any MCP client works. For stdio, the command is <code>/path/to/modm-data-tools/.venv/bin/modm-data-mcp</code>

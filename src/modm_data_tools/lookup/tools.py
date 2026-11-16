@@ -7,7 +7,7 @@ import functools
 import inspect
 
 from ..errors import UserError
-from . import clocks, docs, figures, headers, irq, pinout, svd
+from . import apps, clocks, docs, figures, headers, irq, pinout, svd
 
 TOOLS = (
     headers.device_header,
@@ -71,5 +71,8 @@ def register(server):
 
     annotations = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
     for function in TOOLS:
+        # with MCP apps on, decode_register and clock_solve also link to their app and send its data
+        function, meta = apps.tool(function)
         # the text only once: a return annotation would add an outputSchema and the answer again as structuredContent
-        server.tool(annotations=annotations, structured_output=False)(tool(function))
+        server.tool(annotations=annotations, structured_output=False, meta=meta)(tool(function))
+    apps.register(server)

@@ -31,7 +31,7 @@ from modm_data.cubemx import clock_tree as cubemx_clock_tree, conditions as cube
 from ..irq import sources as irq_sources, graph as irq_graph, interconnect as irq_interconnect
 from modm_data import html2pinout
 from modm_data.html2pinout import signals as html2pinout_signals
-from . import clocks, core, docs, figures, headers, irq, pinout, svd, tools
+from . import apps, clocks, core, docs, figures, headers, irq, pinout, svd, tools
 from .. import errors
 
 # the package exports its function evaluate under the name of the module
@@ -68,6 +68,7 @@ MODULES = (
     html2pinout,
     html2pinout_signals,
     pinout,
+    apps,
     tools,
 )
 
