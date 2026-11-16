@@ -75,6 +75,19 @@ class ClockSolverTest(unittest.TestCase):
         r = Solver(tree("STM32G564HBUx")).solve({}, (), {"USART1": 16e6}, {"USART1"}, 0, budget=3)
         self.assertTrue(r["ok"])
 
+    def test_no_default(self):
+        # The F105 PLLMUL has no default, the solver may not lock it at None
+        r = Solver(tree("STM32F105R8Tx")).solve({}, (), {"RTC": 32768}, {"RTC"}, 0, budget=3)
+        self.assertTrue(r["ok"])
+
+    def test_factor_needs_input(self):
+        # The C5 PSI x2 is for a 50 MHz reference only, 8 MHz x2 is no setting
+        t = tree("STM32C591CETx")
+        self.assertNotIn(16e6, Solver(t).reachable("SysCLKOutput"))
+        r = Solver(t).solve({}, (), {"SysCLKOutput": 100e6}, None, 0, budget=5)
+        self.assertEqual(r["config"]["PSI"], "12.5")
+        self.assertFalse(evaluate(t, r["config"])["PSI"]["errors"])
+
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency
         t = tree("STM32H743ZITx")
