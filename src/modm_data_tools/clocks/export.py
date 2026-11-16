@@ -58,15 +58,18 @@ def export_apis(out: Path, partnames: list[str]):
 
 
 def export_max_one(path: Path):
-    r = max_performance(json.loads(path.read_text()))
+    try:
+        r = max_performance(json.loads(path.read_text()))
+    except Exception as error:
+        # the page searches in Pyodide for this tree, but not silently
+        print(f"{path.stem}: no max performance, {type(error).__name__}: {error}", file=sys.stderr)
+        return path.stem, None
     if r is None:
         return path.stem, None
+    # The F0 and F7 limit only HCLK, some trees have no SYSCLK node
+    clock = r["result"].get("SysCLKOutput") or r["result"].get("AHBOutput") or {}
     # what web/clocks/app.js reads of a max_performance() result
-    return path.stem, {
-        "config": r["config"],
-        "use": r["use"],
-        "result": {"SysCLKOutput": {"freq": r["result"]["SysCLKOutput"]["freq"]}},
-    }
+    return path.stem, {"config": r["config"], "use": r["use"], "result": {"SysCLKOutput": {"freq": clock.get("freq")}}}
 
 
 def export_max(out: Path, keys: set[str]):
