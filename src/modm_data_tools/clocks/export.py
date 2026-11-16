@@ -52,7 +52,7 @@ def export_apis(out: Path, partnames: list[str]):
 
 
 def copy_python(target: Path):
-    """The pure Python clock code in its packages, which clocks-worker.js loads into Pyodide."""
+    """The pure Python clock code in its packages, which web/clocks/worker.js loads into Pyodide."""
     packages = {
         "modm_data/clocks": (Path(modm_data.clocks.__file__).parent, ("__init__.py", "evaluate.py")),
         "modm_data_tools/clocks": (

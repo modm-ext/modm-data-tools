@@ -1,5 +1,7 @@
+// Copyright 2026, Niklas Hauser
+// SPDX-License-Identifier: MPL-2.0
 // The Python clock code in a worker: evaluate, solve, max performance and code generation, all async.
-const worker = new Worker(new URL("./clocks-worker.js", import.meta.url));
+const worker = new Worker(new URL("./worker.js", import.meta.url));
 let next = 0;
 const pending = new Map();
 worker.onmessage = ({data: {id, out, error}}) => {
@@ -22,10 +24,3 @@ export const evaluate = (config, use) => call("evaluate", {config, use: use ? [.
 export const solve = (args) => call("solve", {...args, locked: [...args.locked], use: args.use ? [...args.use] : null});
 export const maxPerformance = (config) => call("max", {config});
 export const generate = (config, use) => call("generate", {config, use: use ? [...use] : null});
-
-export function fmtHz(hz) {
-  if (hz === null || hz === undefined || !Number.isFinite(hz)) return "—";
-  for (const [unit, scale] of [["GHz", 1e9], ["MHz", 1e6], ["kHz", 1e3]])
-    if (Math.abs(hz) >= scale) return `${Number((hz / scale).toPrecision(7))} ${unit}`;
-  return `${Number(hz.toPrecision(7))} Hz`;
-}

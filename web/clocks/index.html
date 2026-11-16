@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>STM32 Clock Solver</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="graph-view.css">
 <link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
 </head>
 <body data-page="clocks">
 <nav class="site" aria-label="modm-data pages"></nav>
-<script type="module" src="../shared/site.js"></script>
 <header>
   <h1>STM32 Clock Solver</h1>
   <input id="device" list="devices" placeholder="device, e.g. STM32G071RB" autocomplete="off">
@@ -27,15 +28,7 @@
   <span id="status"></span>
 </header>
 <main>
-  <div id="stage">
-    <div id="pan"><div id="world"><svg id="wires"></svg></div></div>
-    <div id="hud">
-      <button class="ghost" id="zoomOut">−</button>
-      <button class="ghost" id="zoomIn">+</button>
-      <button class="ghost" id="fit">fit</button>
-      <button class="ghost" id="relayout">layout</button>
-    </div>
-  </div>
+  <div id="stage"></div>
   <div id="grip" title="drag to resize the panel"></div>
   <div id="side">
     <div class="section"><h2>Result</h2><div id="result" class="sub">—</div></div>
@@ -43,13 +36,5 @@
     <div class="section"><h2>modm Rcc code</h2><pre id="code">—</pre></div>
   </div>
 </main>
-<script type="module">
-  // Cache-busted so edits show up on reload, the modules import each other with the same version
-  const v = Date.now();
-  await import(`./clocks-app.js?v=${v}`).then((app) => app.start(v)).catch((e) => {
-    document.getElementById("status").innerHTML = `<span class="err">${e.message}</span>`;
-    throw e;
-  });
-</script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-"""The calls the clock solver page makes into modm_data.clocks, JSON in and out (runs in Pyodide, see ../clocks-worker.js)."""
+"""The calls the clock solver page makes into modm_data.clocks, JSON in and out (runs in Pyodide, see ../worker.js)."""
 
 import json
 import math

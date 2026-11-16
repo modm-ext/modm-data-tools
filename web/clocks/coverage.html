@@ -44,8 +44,8 @@
 <script type="module" src="../shared/site.js"></script>
 <div id="page"></div>
 <script type="module">
-import * as py from "./clocks-py.js";
-const {fmtHz} = py;
+import * as py from "./py.js";
+import {fmtHz} from "./model.js";
 
 const page = document.getElementById("page");
 const coverage = await (await fetch("data/coverage.json")).json();

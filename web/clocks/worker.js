@@ -1,3 +1,5 @@
+// Copyright 2026, Niklas Hauser
+// SPDX-License-Identifier: MPL-2.0
 // Runs the Python clock code (copied to py/ by python -m modm_data_tools.clocks) and py/site_api.py in Pyodide.
 // Messages are {id, op, args} in and {id, out} or {id, error} out, everything as JSON.
 importScripts("https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js");

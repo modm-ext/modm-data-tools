@@ -1,5 +1,5 @@
 """
-Collects the clock meter coverage of the hardware CI boards for web/clocks/clocks-coverage.html.
+Collects the clock meter coverage of the hardware CI boards for web/clocks/coverage.html.
 
     python -m modm_data_tools.clocks.coverage "<folder with <board>.json>" --output <folder>
 

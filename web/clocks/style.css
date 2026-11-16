@@ -1,17 +1,12 @@
 /* Copyright 2026, Niklas Hauser
  * SPDX-License-Identifier: MPL-2.0
  * The clock solver page on top of ../shared/theme.css.
- * Green = the clock flows here, grey = idle, red = breaks a limit (same as clocks-coverage.html). */
+ * Green = the clock flows here, grey = idle, red = breaks a limit (same as coverage.html). */
 
 :root {
   --bg: var(--ground); --panel: var(--surface); --line: var(--rule); --dim: var(--muted);
   --good: var(--ok); --bad: var(--error); --lock: var(--warn); --mono: var(--font-mono);
-  --no: #A9B1AD; --passed: #DDF1E4; --target: #3557B7;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --no: #4A5752; --passed: #1C3A2A; --target: #9DB4F5; }
-}
-:root[data-theme="dark"] { --no: #4A5752; --passed: #1C3A2A; --target: #9DB4F5; }
 
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 var(--font-sans);
@@ -43,47 +38,4 @@ pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; 
 ul.list { margin: 0; padding-left: 16px; font: 11px var(--mono); }
 #status { font-size: 12px; }
 
-#stage { position: relative; overflow: hidden; cursor: grab; touch-action: none; }
-#stage.panning { cursor: grabbing; }
-#pan { position: absolute; left: 0; top: 0; will-change: transform; }
-#world { position: relative; }
-#wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-#wires path { fill: none; stroke: var(--line); stroke-width: 1; }
-#wires path.sel { stroke: var(--no); stroke-width: 1.4; }
-#wires path.live { stroke: var(--ok); stroke-width: 2.2; }
-.node { position: absolute; width: 172px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
-        padding: 4px 6px 5px; font-size: 11px; overflow: hidden; }
-.node.used { background: var(--passed); }
-.node.locked { border-color: var(--lock); }
-.node.target { border-color: var(--target); box-shadow: 0 0 0 1px var(--target); }
-.node.bad { border-color: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 30%, transparent); }
-.node.periph { width: 150px; }
-.node.wide { width: 250px; }
-.chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
-.chip { padding: 0 5px; border-radius: 4px; border: 1px solid var(--no); background: var(--panel); color: var(--dim);
-        font: 10.5px var(--mono); cursor: pointer; }
-.chip.sel { border-color: var(--ink); color: var(--ink); box-shadow: inset 0 -2px 0 currentColor; }
-.chip.sel.ok { border-color: var(--ok); color: var(--ok); }
-.head { display: flex; justify-content: space-between; align-items: center; gap: 4px; cursor: move;
-        font: 600 10.5px var(--mono); }
-.head .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kind { font: 9px var(--mono); color: var(--dim); text-transform: uppercase; }
-.hz { font: 600 12px var(--mono); }
-.hz.none { color: var(--dim); font-weight: 400; }
-.row { display: flex; gap: 4px; align-items: center; margin-top: 3px; }
-.row select, .row input { flex: 1; min-width: 0; padding: 1px 4px; font-size: 10.5px; }
-.row .lbl { font: 9.5px var(--mono); color: var(--dim); white-space: nowrap; }
-.tgt { width: 74px; flex: none !important; }
-.tgt.set { border-color: var(--target); color: var(--target); font-weight: 600; }
-.lim { font: 9.5px var(--mono); color: var(--dim); margin-top: 2px; }
-.lim.bad { color: var(--bad); }
-.feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 0 4px; margin-top: 4px; padding-top: 3px;
-         border-top: 1px dashed var(--line); font: 9.5px var(--mono); color: var(--dim); }
-.feed { display: flex; align-items: center; gap: 2px; white-space: nowrap; overflow: hidden; cursor: pointer; }
-.feed input { margin: 0; width: 10px; height: 10px; }
-.feed.on { color: var(--ink); }
-.feed.bad { color: var(--bad); font-weight: 600; }
-.lockbtn { border: none; background: none; cursor: pointer; padding: 0; font-size: 11px; color: var(--dim); }
-.lockbtn.on { color: var(--lock); }
-#hud { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; background: var(--panel);
-       border: 1px solid var(--line); border-radius: 7px; padding: 4px; }
+#stage { min-height: 0; }
