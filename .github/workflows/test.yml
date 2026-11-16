@@ -28,6 +28,17 @@ jobs:
         run: |
           python3 -c "import importlib, pkgutil, modm_data_tools as m; [importlib.import_module(i.name) for i in pkgutil.walk_packages(m.__path__, 'modm_data_tools.') if not i.name.endswith('__main__')]"
 
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The models of the web pages have no DOM access, so they run in node
+      - name: Run Web Model Tests
+        if: always()
+        run: |
+          node --test 'test/web/*.test.mjs'
+
       - name: Run Ruff Formatter
         if: always()
         uses: chartboost/ruff-action@v1

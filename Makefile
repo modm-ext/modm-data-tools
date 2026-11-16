@@ -18,8 +18,13 @@ venv:
 
 .PHONY: test
 ## Run the unit tests (the ones that need private data skip without it).
-test:
+test: test-web
 	@.venv/bin/pytest
+
+.PHONY: test-web
+## Run the tests of the web page models with node's test runner.
+test-web:
+	@node --test 'test/web/*.test.mjs'
 
 .PHONY: format
 ## Format and lint the Python code.
