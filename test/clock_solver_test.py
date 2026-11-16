@@ -3,11 +3,17 @@
 
 import contextlib
 import io
+import subprocess
+import tempfile
 import unittest
 from functools import cache
+from pathlib import Path
+from unittest import mock
 
 from modm_data.clocks import evaluate
-from modm_data_tools.clocks.configure import find_node, parse_targets, report, solve_text
+from modm_data_tools.clocks import export, modm_api
+from modm_data_tools.clocks.configure import _source_path, find_node, parse_targets, report, solve_text
+from modm_data_tools.errors import UserError
 from modm_data_tools.clocks.modm import _pick_setter, _Writer, candidates, generate, system_clock
 from modm_data_tools.clocks.solver import Solver, max_performance
 from modm_data_tools.lookup.__main__ import main as cli
@@ -110,6 +116,44 @@ class ClockSolverTest(unittest.TestCase):
         s = solve_text(tree("STM32F205RGTx"), "SYSCLK=max", "HSE=8M")
         self.assertAlmostEqual(s["result"]["AHBOutput"]["freq"], 120e6, delta=1)
 
+    def test_invalid_input(self):
+        """Values the solver would ignore and targets it cannot mean are errors of the input, also when locked"""
+        t = tree("STM32G474RETx")
+        for config, message in (
+            ("HSE=8M, PLLN=1000", "PLLN must be within 8..127, not 1000"),
+            ("SysClkSource=BOGUS", "SysClkSource has no input 'BOGUS', choose from RCC_SYSCLKSOURCE_HSI"),
+            ("HSE=Crystal", "HSE has no mode 'Crystal', choose from ByPass, Oscillator"),
+            ("PLLNN=20", "no clock 'PLLNN'"),
+            ("PWR_Regulator_Voltage_Scale=SCALE9", "cannot be 'SCALE9', choose from PWR_REGULATOR_VOLTAGE_SCALE1"),
+            ("HSE=8M, HSE=ByPass, PWR_Regulator_Voltage_Scale=SCALE1", None),
+        ):
+            with self.subTest(config=config):
+                if message is None:
+                    self.assertTrue(solve_text(t, "SYSCLK=max", config)["ok"])
+                    continue
+                with self.assertRaisesRegex(UserError, message):
+                    solve_text(t, "SYSCLK=max", config, lock="PLLN")
+        for targets, message in (
+            ("SYSCLK=20M..10M", "the range 20M..10M is reversed"),
+            ("USART1=0", "above 0 Hz"),
+            ("ADC12<=0", "above 0 Hz"),
+            ("SYSCLK=16M, SysCLKOutput=170M", "SysCLKOutput is a target twice"),
+            (" , ", "no targets given"),
+        ):
+            with self.subTest(targets=targets), self.assertRaisesRegex(UserError, message):
+                parse_targets(t, targets)
+
+    def test_sources(self):
+        """With an HSE the core runs from it, a target out of reach reports the closest frequency it gets"""
+        t = tree("STM32G474RETx")
+        s = solve_text(t, "SYSCLK=16M", "HSE=8M")
+        self.assertTrue(s["ok"])
+        self.assertTrue(_source_path(t, s["result"], "SysCLKOutput").endswith("HSEOSC"))
+        s = solve_text(t, "SYSCLK=170M, SAI1=12.288M~0.1%", "HSE=24M")
+        self.assertFalse(s["ok"])
+        self.assertAlmostEqual(s["unmet"][0]["closest"], 12.333e6, delta=1e3)
+        self.assertIn("SAI1 cannot reach its target on any path, the closest it gets", report(t, s))
+
     def test_cli(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
@@ -145,6 +189,67 @@ class ClockSolverTest(unittest.TestCase):
         code = generate(t, "STM32F215RETx", s["config"], s["result"], set(), api)
         self.assertIn("Rcc::enablePll(Rcc::PllSource::Hse, pll);", code)
         self.assertIn("\tstatic constexpr uint32_t SysClk    = 120_MHz;", code)
+
+
+class ModmApiTest(unittest.TestCase):
+    """The modm Rcc API without lbuild and without the CubeMX database"""
+
+    def test_parse(self):
+        api = modm_api.parse("""
+        class Rcc {
+        public:
+            enum class PllSource : uint32_t {
+                Hsi = RCC_PLLCFGR_PLLSRC_HSI, // the HSI16
+                Hse = RCC_PLLCFGR_PLLSRC_HSE,
+            };
+            using UsbClockSource = PllSource;
+            struct PllConfig {
+                uint8_t pllM;
+                uint16_t pllN = 8;
+            };
+            static constexpr uint32_t BootFrequency = 16'000'000;
+            static bool
+            enablePll(PllSource source, const PllConfig& pllConfig);
+        };""")
+        self.assertEqual(
+            api["enums"]["PllSource"], [["Hsi", "RCC_PLLCFGR_PLLSRC_HSI"], ["Hse", "RCC_PLLCFGR_PLLSRC_HSE"]]
+        )
+        self.assertEqual(api["enums"]["UsbClockSource"], api["enums"]["PllSource"])
+        self.assertEqual(api["structs"]["PllConfig"], [["uint8_t", "pllM", ""], ["uint16_t", "pllN", "8"]])
+        self.assertEqual(api["functions"], {"enablePll": "PllSource source, const PllConfig& pllConfig"})
+        self.assertEqual(api["constants"], {"BootFrequency": "16'000'000"})
+
+    def test_target_of(self):
+        known = [
+            "stm32g071rbt3",
+            "stm32g071rbt6",
+            "stm32g071rbt7",
+            "stm32l552zet3q",
+            "stm32l552zet6q",
+            "stm32h7a3zit6q",
+        ]
+        self.assertEqual(modm_api.target_of("STM32G071RBTx", known), "stm32g071rbt6")
+        self.assertEqual(modm_api.target_of("STM32L552ZETxQ", known), "stm32l552zet6q")
+        self.assertEqual(modm_api.target_of("STM32H7A3ZITxQ", known), "stm32h7a3zit6q")
+        self.assertIsNone(modm_api.target_of("STM32G071RBIx", known))
+
+    def test_lbuild_failure(self):
+        """A failed lbuild is an error with its output and not cached, the export names the device it leaves out"""
+        failed = subprocess.CompletedProcess([], 1, "", "ERROR: no repo.lb")
+        repo = Path(tempfile.gettempdir()) / "no-modm-here"
+        with mock.patch("subprocess.run", return_value=failed):
+            with self.assertRaisesRegex(RuntimeError, "lbuild discover .* failed: ERROR: no repo.lb"):
+                modm_api.targets(repo)
+            with self.assertRaisesRegex(RuntimeError, "failed: ERROR"):
+                modm_api.render("stm32g071rbt6", repo)
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "stm32g071rbt6", "")):
+            self.assertEqual(modm_api.targets(repo), ["stm32g071rbt6"])
+        modm_api.targets.cache_clear()
+        error = io.StringIO()
+        with mock.patch.object(export, "api_of", side_effect=RuntimeError("lbuild failed")):
+            with contextlib.redirect_stderr(error):
+                self.assertEqual(export.export_api("STM32G071RBTx"), ("STM32G071RBTx", None))
+        self.assertIn("STM32G071RBTx: no modm Rcc API, RuntimeError: lbuild failed", error.getvalue())
 
 
 if __name__ == "__main__":

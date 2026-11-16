@@ -44,11 +44,21 @@ def _git_head(repo: Path) -> str:
     return out.stdout.strip() + ("-dirty" if dirty else "")
 
 
+def _run(command: list[str], cwd: str) -> str:
+    """The output of lbuild, a RuntimeError with the end of its error output if it fails"""
+    out = subprocess.run([*_lbuild(), *command], capture_output=True, text=True, cwd=cwd)
+    if out.returncode:
+        raise RuntimeError(f"lbuild {' '.join(command[2:])} failed: {out.stderr.strip()[-500:]}")
+    return out.stdout
+
+
 @cache
 def targets(repo: Path) -> list[str]:
-    out = subprocess.run([*_lbuild(), "-r", str(repo / "repo.lb"), "discover", "--values", "-n", "modm:target"],
-                         capture_output=True, text=True, cwd=tempfile.gettempdir()).stdout  # fmt: skip
-    return sorted(set(re.findall(r"stm32[a-z0-9]+", out)))
+    """The STM32 targets of modm, a failed lbuild raises and is not cached"""
+    out = _run(["-r", str(repo / "repo.lb"), "discover", "--values", "-n", "modm:target"], tempfile.gettempdir())
+    if not (found := sorted(set(re.findall(r"stm32[a-z0-9]+", out)))):
+        raise RuntimeError(f"lbuild discover found no STM32 targets in {repo}")
+    return found
 
 
 def target_of(partname: str, known: list[str]) -> str | None:
@@ -89,8 +99,7 @@ def parse(text: str) -> dict:
 
 def render(target: str, repo: Path) -> dict | None:
     with tempfile.TemporaryDirectory() as folder:
-        subprocess.run([*_lbuild(), "-r", str(repo / "repo.lb"), "-D", f"modm:target={target}",
-                        "build", "-m", "modm:platform:rcc"], cwd=folder, capture_output=True, text=True)  # fmt: skip
+        _run(["-r", str(repo / "repo.lb"), "-D", f"modm:target={target}", "build", "-m", "modm:platform:rcc"], folder)
         path = Path(folder) / "modm/src/modm/platform/clock/rcc.hpp"
         return parse(path.read_text()) | {"target": target} if path.exists() else None
 
@@ -108,5 +117,8 @@ def api_of(partname: str, repo: Path | None = None) -> dict | None:
     api = render(target, repo)
     if api is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(api, separators=(",", ":"), sort_keys=True))
+        # other processes may read it at the same time
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, suffix=".tmp", delete=False) as f:
+            f.write(json.dumps(api, separators=(",", ":"), sort_keys=True))
+        os.replace(f.name, path)
     return api

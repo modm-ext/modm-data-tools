@@ -6,7 +6,8 @@ importScripts("https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js");
 
 const FILES = [
   "modm_data/__init__.py", "modm_data/clocks/__init__.py", "modm_data/clocks/evaluate.py",
-  "modm_data_tools/__init__.py", "modm_data_tools/clocks/__init__.py", "modm_data_tools/clocks/solver.py",
+  "modm_data_tools/__init__.py", "modm_data_tools/errors.py", "modm_data_tools/clocks/__init__.py",
+  "modm_data_tools/clocks/solver.py",
   "modm_data_tools/clocks/configure.py", "modm_data_tools/clocks/modm.py", "site_api.py",
 ];
 

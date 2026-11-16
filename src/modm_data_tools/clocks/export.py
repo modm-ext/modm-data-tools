@@ -19,11 +19,13 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
 from multiprocessing import Pool
 from pathlib import Path
 
 import modm_data.clocks
 
+import modm_data_tools
 import modm_data_tools.clocks
 from .modm_api import api_of
 
@@ -31,7 +33,9 @@ from .modm_api import api_of
 def export_api(partname: str):
     try:
         return partname, api_of(partname)
-    except Exception:
+    except Exception as error:
+        # the device is left out of rcc.json, but not silently
+        print(f"{partname}: no modm Rcc API, {type(error).__name__}: {error}", file=sys.stderr)
         return partname, None
 
 
@@ -67,6 +71,8 @@ def copy_python(target: Path):
         (folder.parent / "__init__.py").write_text("")
         for name in names:
             shutil.copy(source / name, folder / name)
+    # configure.py raises its errors
+    shutil.copy(Path(modm_data_tools.__file__).parent / "errors.py", target / "modm_data_tools/errors.py")
 
 
 def main():

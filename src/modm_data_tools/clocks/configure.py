@@ -16,8 +16,9 @@ import math
 import re
 import time
 
-from modm_data.clocks.evaluate import _frequency, _test, evaluate, option_value
-from .solver import Solver, fmt_hz, is_variable
+from modm_data.clocks.evaluate import _frequency, _setting, _test, evaluate, identifiers, option_value
+from ..errors import UserError
+from .solver import Solver, fmt_hz
 
 _ALIASES = {
     "SYSCLK": ["SysCLKOutput"],
@@ -39,7 +40,7 @@ _SPEC = re.compile(r"^\s*([\w\-.]+)\s*(<=|>=|=)\s*(.+?)\s*$")
 
 
 def find_node(tree: dict, name: str) -> str:
-    """:return: The node a name stands for, or a ValueError with the closest names."""
+    """:return: The node a name stands for, or a UserError with the closest names."""
     nodes, key = tree["nodes"], name.strip()
     if key in nodes:
         return key
@@ -60,7 +61,7 @@ def find_node(tree: dict, name: str) -> str:
         return names[upper]
     close = difflib.get_close_matches(upper, list(names), 6, 0.6)
     hint = f", did you mean {', '.join(names[c] for c in close)}?" if close else ""
-    raise ValueError(f"no clock '{name}' in this tree{hint}")
+    raise UserError(f"no clock '{name}' in this tree{hint}")
 
 
 def parse_items(text: str) -> list[tuple[str, str, str]]:
@@ -68,7 +69,7 @@ def parse_items(text: str) -> list[tuple[str, str, str]]:
     items = []
     for item in filter(None, (i.strip() for i in re.split(r"[,;\n]", text or ""))):
         if not (m := _SPEC.match(item)):
-            raise ValueError(f"items are name=value, name<=value or name>=value, not '{item}'")
+            raise UserError(f"items are name=value, name<=value or name>=value, not '{item}'")
         items.append((m[1], m[2], m[3]))
     return items
 
@@ -106,10 +107,12 @@ def parse_targets(tree: dict, text: str, settings: dict | None = None) -> dict:
     targets = {}
     for name, op, value in parse_items(text):
         node = find_node(tree, name)
+        if node in targets:
+            raise UserError(f"{name} is a target twice ({node})")
         value = value.replace(" ", "")
         if value.lower() == "max":
             if (top := _maximum(tree, node, settings)) is None:
-                raise ValueError(f"{name} has no maximum frequency to aim at, give one")
+                raise UserError(f"{name} has no maximum frequency to aim at, give one")
             targets[node] = (0, top, None)
             continue
         try:
@@ -126,23 +129,48 @@ def parse_targets(tree: dict, text: str, settings: dict | None = None) -> dict:
                 eps = max(f * tol, f * 1e-9, 1e-6)
                 targets[node] = (f - eps, f + eps, f)
         except ValueError as error:
-            raise ValueError(f"{name}: {error}, write 48M, 12.288MHz, 32.768k, max or a range 10M..12M") from None
+            raise UserError(f"{name}: {error}, write 48M, 12.288MHz, 32.768k, max or a range 10M..12M") from None
+        lo, hi, aim = targets[node]
+        if lo > hi:
+            raise UserError(f"{name}: the range {value} is reversed")
+        if aim <= 0:
+            raise UserError(f"{name}: the frequency must be above 0 Hz, not {value}")
+    if not targets:
+        raise UserError("no targets given, e.g. 'SYSCLK=max, USB=48M'")
     return targets
 
 
 def parse_config(tree: dict, text: str) -> dict:
-    """:return: The settings with node names resolved, other keys (options, modes, flags) as they are."""
+    """:return: The settings with node names resolved, other keys (options, modes, flags) as they are.
+    A value that a node, mode or option cannot take is a UserError, the solver would ignore it."""
     config = {}
     for name, op, value in parse_items(text):
         if op != "=":
-            raise ValueError(f"config items are name=value, not '{name}{op}{value}'")
-        if name in tree.get("modes", {}) and not re.match(r"[\d.]", value):
-            config[name] = value  # an oscillator mode, for example, HSE=ByPass
+            raise UserError(f"config items are name=value, not '{name}{op}{value}'")
+        if (modes := tree.get("modes", {}).get(name)) and not re.match(r"[\d.]", value):
+            # an oscillator mode, for example, HSE=ByPass
+            if not any(value.lower() in (m.lower(), f.lower()) for m, f in modes.items()):
+                raise UserError(f"{name} has no mode '{value}', choose from {', '.join(modes)}")
+            config[name] = value
             continue
         try:
             name = find_node(tree, name)
-        except ValueError:
-            pass  # an option or flag, evaluate() knows them
+        except UserError:
+            # an option or a flag that a rule tests, evaluate() knows them
+            if name not in tree["options"] and name not in identifiers(tree):
+                raise
+            choices = tree.get("choices", {}).get(name) or [
+                f["macro"] for f in tree["semaphores"].values() if f["param"] == name
+            ]
+            if choices and option_value(tree, name, value) not in choices:
+                raise UserError(f"{name} cannot be '{value}', choose from {', '.join(choices)}") from None
+            config[name] = value
+            continue
+        try:
+            _setting(name, tree["nodes"][name], value)
+        except ValueError as error:
+            # names the allowed values or the range of the node
+            raise UserError(str(error)) from None
         config[name] = value
     return config
 
@@ -261,8 +289,7 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
     locked = {find_node(tree, n) for n in (lock or "").split(",") if n.strip()}
     # A board's oscillator frequencies are facts, not choices
     locked |= {n for n in settings if tree["nodes"].get(n, {}).get("kind") in ("varied", "fixed")}
-    in_use = _peripherals(tree, [u for u in (use or "").split(",") if u.strip()] + list(goals))
-    use_set = in_use or set()
+    use_set = _peripherals(tree, [u for u in (use or "").split(",") if u.strip()] + list(goals))
     start = time.monotonic()
     # The board decides which external clocks exist: only those set in config count
     available = restrict(tree, settings)
@@ -450,8 +477,3 @@ def report(tree: dict, solved: dict, device: str = "", code: str | None = None) 
 def _problem(text: str) -> str:
     name, _, rest = text.partition(": ")
     return f"{name} {_human(rest)}"
-
-
-def variables(tree: dict) -> list[str]:
-    """:return: The nodes the solver may move."""
-    return [n for n, node in tree["nodes"].items() if is_variable(node)]
