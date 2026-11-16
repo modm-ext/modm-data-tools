@@ -8,7 +8,8 @@ import re
 from functools import cache
 from pathlib import Path
 
-from modm_data.svd import read_svd
+from modm_data.svd.read import read_svd
+from ..errors import UserError
 from . import core as _core
 from .headers import MODM_DATA, _identifiers, _select, cores as core_types, normalize
 
@@ -57,19 +58,19 @@ def _device(device: str) -> tuple[str, dict]:
     found = _select(device)
     if len(found) != 1:
         names = ", ".join(h.stem for h in found) or "none"
-        raise ValueError(f"'{device}' must select exactly one device header, it selects: {names}")
+        raise UserError(f"'{device}' must select exactly one device header, it selects: {names}")
     header, parts = next(iter(found.items()))
     cores = sorted({_identifiers()[p].core for p in parts if getattr(_identifiers()[p], "core", "")})
     # only some dual-core devices have one header per core (H745), others share one (WL55)
     path = SVD / f"header_{header.stem}.svd"
     if cores and (SVD / f"header_{header.stem}_c{cores[0]}.svd").exists():
         if not core:
-            raise ValueError(
+            raise UserError(
                 f"{header.stem} is a dual-core device, add the core: {', '.join(f'stm32{device}@{c}' for c in cores)}"
             )
         path = SVD / f"header_{header.stem}_c{core}.svd"
     if not path.exists():
-        raise FileNotFoundError(f"no SVD {path.name} generated from the headers")
+        raise UserError(f"no SVD {path.name} generated from the headers")
     # the Cortex-M core peripherals of the device (of the given core), the vendor peripherals take precedence
     kinds = {core_types()[p] for p in parts if not core or p.endswith(f"@{core}")}
     kind = kinds.pop() if len(kinds) == 1 else ""
@@ -89,7 +90,7 @@ def _bits(f) -> str:
 
 def _find(peripherals: dict, register: str) -> list[tuple[str, dict]]:
     """Registers by 'RCC.CR', 'RCC_CR', 'GPIOA_MODER' or an address inside them"""
-    if re.fullmatch(r"(0x)?[0-9a-fA-F_]+", register) and register.lower().startswith("0x"):
+    if re.fullmatch(r"0[xX][0-9a-fA-F_]+", register):
         address = int(register.replace("_", ""), 16)
         return [
             (p, r)
@@ -106,10 +107,10 @@ def register_map(device: str, peripheral: str) -> str:
     from the SVD generated from the CMSIS header of the device. Register arrays are shown once."""
     name, peripherals = _device(device)
     if not peripheral.strip():
-        raise ValueError("no peripheral given, e.g. 'RCC', see device_header for the device")
+        raise UserError("no peripheral given, e.g. 'RCC', see device_header for the device")
     key = next((k for k in peripherals if k.upper() == peripheral.upper()), None)
     if key is None:
-        raise ValueError(f"no peripheral {peripheral} in {name}: {' '.join(sorted(peripherals))}")
+        raise UserError(f"no peripheral {peripheral} in {name}: {' '.join(sorted(peripherals))}")
     info = peripherals[key]
     lines = [f"{name} {key} @ 0x{info['base']:08X}: {info['description']}"]
     fields = lambda r: " ".join(f"{f['name']}[{_bits(f)}]" for f in r["fields"])
@@ -147,7 +148,9 @@ def _values(value: str) -> list[tuple[int | None, int]]:
     """(address, value) pairs: OpenOCD mdw output ('0x40021000: 03030500 00004a83'), or one number.
     Bare digits are hex like OpenOCD prints them, '0x', '0b' and '0d' prefixes are respected."""
     lines = [
-        m for line in value.splitlines() if (m := re.match(r"\s*(0x[0-9a-fA-F]+)\s*:\s*((?:[0-9a-fA-F]+\s*)+)$", line))
+        m
+        for line in value.splitlines()
+        if (m := re.match(r"\s*(0[xX][0-9a-fA-F]+)\s*:\s*((?:[0-9a-fA-F]+\s*)+)$", line))
     ]
     if lines:
         # other lines of the openocd output, e.g. warnings, are ignored
@@ -162,11 +165,11 @@ def _values(value: str) -> list[tuple[int | None, int]]:
             else int(token, 16)
         )
     except ValueError:
-        raise ValueError(
+        raise UserError(
             f"'{value.strip()[:80]}' is neither a number nor mdw output with lines like '0x40021000: 03030500'"
-        )
+        ) from None
     if not 0 <= number < 1 << 32:
-        raise ValueError(f"{value.strip()} does not fit into a 32-bit register")
+        raise UserError(f"{value.strip()} does not fit into a 32-bit register")
     return [(None, number)]
 
 
@@ -181,7 +184,7 @@ def decode_register(device: str, register: str = "", value: str = "") -> str:
     for address, raw in pairs:
         target = f"0x{address:08X}" if address is not None else register
         if not target:
-            raise ValueError("give a register or a value with an address like mdw prints it")
+            raise UserError("give a register or a value with an address like mdw prints it")
         found = _find(peripherals, target)
         if not found:
             out.append(f"no register at {target} in {name}" if address is not None else "")
@@ -189,11 +192,11 @@ def decode_register(device: str, register: str = "", value: str = "") -> str:
                 # e.g. SCB.CFSR on a Cortex-M0+, which has no configurable faults
                 head, _, rest = register.strip().replace(".", "_").partition("_")
                 if info := next((v for k, v in peripherals.items() if k.upper() == head.upper()), None):
-                    raise ValueError(
+                    raise UserError(
                         f"{head} of {name} has no register {rest}, it has: "
                         f"{' '.join(r['name'] for r in info['registers'])}"
                     )
-                raise ValueError(f"no register {register} in {name}, see register_map")
+                raise UserError(f"no register {register} in {name}, see register_map")
             continue
         for peripheral, r in found:
             start = peripherals[peripheral]["base"] + r["offset"]

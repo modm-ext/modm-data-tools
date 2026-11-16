@@ -35,7 +35,13 @@ def _parser() -> argparse.ArgumentParser:
             if parameter.default is inspect.Parameter.empty:
                 command.add_argument(name)
             elif isinstance(parameter.default, bool):
-                command.add_argument(f"--{name}", action="store_true")
+                # --subsections and --no-subsections
+                command.add_argument(
+                    f"--{name}",
+                    action=argparse.BooleanOptionalAction,
+                    default=parameter.default,
+                    help=f"default: {parameter.default!r}",
+                )
             else:
                 command.add_argument(
                     f"--{name}",

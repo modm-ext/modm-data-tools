@@ -18,6 +18,7 @@ from pathlib import Path
 
 from lxml import etree
 
+from ..errors import UserError
 from ..lookup import docs, headers, svd
 from modm_data.utils import ext_path
 
@@ -36,7 +37,7 @@ def clean(text: str) -> str:
 def header_path(device: str) -> Path:
     found = headers._select(headers.normalize(device))
     if len(found) != 1:
-        raise ValueError(f"'{device}' must select exactly one device header, it selects {len(found)}")
+        raise UserError(f"'{device}' must select exactly one device header, it selects {len(found)}")
     return next(iter(found))
 
 
@@ -61,7 +62,9 @@ def header_svd(device: str) -> dict[str, dict]:
 
 
 def rm_of(device: str) -> str:
-    return next(l.split()[0] for l in docs.device_docs(device, "RM").splitlines() if l.startswith("RM"))
+    if rm := next((l.split()[0] for l in docs.device_docs(device, "RM").splitlines() if l.startswith("RM")), None):
+        return rm
+    raise UserError(f"no reference manual for '{device}', see device_docs")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -88,7 +91,9 @@ def rm_tables(doc: str, where) -> list[tuple[str, str, str]]:
 def rm_table(doc: str, number: str) -> tuple[list[str], list[list[str]]]:
     md = docs.doc_table(doc, number, limit=1000)
     lines = [l for l in md.splitlines() if l.startswith("|")]
-    rows = [[c.strip() for c in r.strip("|").split("|")] for r in lines]
+    # cells escape their pipes, e.g. 'A \| B'
+    cells = lambda r: re.split(r"(?<!\\)\|", r.strip().removeprefix("|").removesuffix("|"))
+    rows = [[c.strip().replace("\\|", "|") for c in cells(r)] for r in lines]
     return rows[0], rows[2:]
 
 

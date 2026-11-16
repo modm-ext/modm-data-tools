@@ -7,6 +7,7 @@ import os
 import re
 from functools import cache
 
+from ..errors import UserError
 from .headers import normalize
 
 
@@ -32,7 +33,7 @@ def _device(device: str) -> tuple[str, list[str]]:
     for length in range(len(name), max(len(name) - 4, len("STM32F0")) - 1, -1):
         if found := _partnames(name[:length]):
             return found[0], found
-    raise ValueError(f"no CubeMX device matches '{device}'")
+    raise UserError(f"no CubeMX device matches '{device}'")
 
 
 def _hz(value: float | None) -> str:
@@ -193,7 +194,7 @@ def _find(tree: dict, name: str) -> str:
     if name.lower() in lower:
         return lower[name.lower()]
     close = [n for n in nodes if name.lower() in n.lower()][:8]
-    raise ValueError(
+    raise UserError(
         f"no node '{name}' in the clock tree of {tree['device']}" + (f", similar: {', '.join(close)}" if close else "")
     )
 
@@ -203,7 +204,7 @@ def _config(text: str) -> dict[str, str]:
     for item in filter(None, (i.strip() for i in re.split(r"[,;\n]", text))):
         key, sep, value = item.partition("=")
         if not sep:
-            raise ValueError(f"config items are name=value, not '{item}'")
+            raise UserError(f"config items are name=value, not '{item}'")
         config[key.strip()] = value.strip()
     return config
 
@@ -227,11 +228,15 @@ def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> 
     partname, matches = _device(device)
     tree = _tree(partname)
     if tree is None:
-        raise ValueError(f"CubeMX has no clock tree for {partname}")
+        raise UserError(f"CubeMX has no clock tree for {partname}")
     nodes = tree["nodes"]
     # the defaults also choose the path through the muxes, but their frequencies are only shown for a config
     used = {u.strip() for u in use.split(",") if u.strip()} if use else None
-    evaluated = evaluate_clock_tree(tree, _config(config), used)
+    try:
+        evaluated = evaluate_clock_tree(tree, _config(config), used)
+    except ValueError as e:
+        # an unknown node or a value it cannot take, the message names them
+        raise UserError(str(e)) from None
     result = evaluated if config or use else None
 
     def line(name: str, macros: bool = False) -> str:
@@ -322,13 +327,14 @@ def clock_solve(device: str, targets: str, config: str = "", use: str = "", lock
     partname, matches = _device(device)
     tree = _tree(partname)
     if tree is None:
-        raise ValueError(f"CubeMX has no clock tree for {partname}")
+        raise UserError(f"CubeMX has no clock tree for {partname}")
     solved = solve_text(tree, targets, config, use, lock)
     source = None
     if code and solved["ok"]:
         try:
             source = generate(tree, partname, solved["config"], solved["result"], set(solved["use"]), api_of(partname))
-        except (OSError, ValueError) as error:
+        except (OSError, RuntimeError, ValueError) as error:
+            # no modm repository, lbuild failed or the device has no modm target
             source = f"// no modm code: {error}"
     elif code:
         source = "// no code without a solution"

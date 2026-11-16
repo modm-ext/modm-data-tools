@@ -10,14 +10,17 @@ import os
 import re
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from modm_data_tools.lookup.markdown import grid, table_markdown
 from modm_data_tools.lookup.tree import Tree
 from modm_data_tools.lookup import docs, figures, headers, pinout, svd
 from modm_data_tools.lookup.__main__ import main as cli
+from modm_data_tools.errors import UserError, UserRegex
 from modm_data.svd import read_svd
 
 
@@ -110,6 +113,50 @@ class Parsers(unittest.TestCase):
             f.flush()
             usart2 = read_svd(f.name).children[1]
         assert usart2.description == "Universal" and usart2.address == 0x40004400, usart2
+
+    def test_normalize(self):
+        """Device names in all the forms the tools print or users write"""
+        for name, normal in (
+            ("STM32G474RETx", "g474ret"),
+            ("g474ret6tr", "g474ret6"),
+            ("stm32h743zit6/revy", "h743zit6"),
+            ("h745zi@m7", "h745zi@m7"),
+            ("stm32g474xx.h", "g474xx"),
+            ("STM32N657X0HxQ", "n657x0hxq"),
+        ):
+            assert headers.normalize(name) == normal, (name, headers.normalize(name))
+        for empty in ("", " ", "stm32"):
+            assert isinstance(_raises(lambda: headers.normalize(empty)), UserError)
+        assert headers.normalize("", empty=True) == ""
+
+    def test_user_regex(self):
+        """Regexes from tool input: invalid and too slow ones are errors of the input, and stop in time"""
+        assert "invalid regex" in str(_raises(lambda: UserRegex("RCC_(CR")))
+        assert [m[0] for m in UserRegex("a.", re.I).finditer("A1 a2")] == ["A1", "a2"]
+        start = time.monotonic()
+        assert "pattern too slow" in str(_raises(lambda: UserRegex(r"(a|a)+$").search("a" * 40 + "!")))
+        assert time.monotonic() - start < 5
+
+    def test_files(self):
+        """Cache files are replaced as a whole, the size of a bitmap comes from Pillow"""
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            docs.write_atomic(path, "old")
+            docs.write_atomic(path, "new")
+            assert path.read_text() == "new" and [p.name for p in Path(folder).iterdir()] == ["cache.json"]
+            Image.new("RGB", (17, 5)).save(png := Path(folder) / "f.png")
+            assert figures._pixels(png) == (17, 5)
+
+    def test_rm_table(self):
+        """Pipes escaped in a cell stay in the cell"""
+        from modm_data_tools.irq import sources
+
+        table = "RM9 v1\n\n| Position | Acronym |\n|---|---|\n| 3 | RTC\\|TAMP |\n| 4 | FLASH |"
+        with mock.patch.object(docs, "doc_table", return_value=table):
+            assert sources.rm_table("RM9", "1") == (["Position", "Acronym"], [["3", "RTC|TAMP"], ["4", "FLASH"]])
+        sources.rm_table.cache_clear()
 
 
 @unittest.skipUnless(
@@ -397,6 +444,57 @@ class Lookups(unittest.TestCase):
         stk = docs.doc_register("STK_CSR", "stm32c031c6")
         assert "| 31:17 | Reserved |  | Reserved" in stk and "| 16 |" in stk and "| 15:3 | Reserved |" in stk, stk
 
+    def test_seventh_review(self):
+        """Fixes after the seventh review: names, regexes, limits and errors of the input"""
+        # every register name of the index is a valid pattern, also with a placeholder twice (TIMx_CCRx)
+        names = [n for (n,) in docs._db().execute("SELECT DISTINCT name FROM register")]
+        assert len([docs._pattern(n) for n in names]) > 1000
+        assert docs._pattern("TIMx_CCRx").fullmatch("TIM2_CCR3")
+        # family names, the CubeMX names that the clock tools print, upper case addresses
+        assert "STM32G0" in docs.doc_search("STM32G0 PLL", limit=3) and "STM32G0" in docs.find_tables("STM32G0")
+        assert "stm32g474xx.h (3 devices" in headers.device_header("STM32G474RETx")
+        assert "stm32g474xx RCC" in svd.register_map("STM32G474RETx", "RCC")
+        assert "no part number starts with 'zz9'" in str(_raises(lambda: docs.doc_search("clock", device="zz9")))
+        out = docs.doc_register("fdcan1_cccr", device="stm32h723zg")
+        assert "FDCAN1.CCCR 0x4000A018" in out and "FDCAN2" not in out, out
+        assert "DMAMUX1.C15CR" in docs.doc_register("dmamux_cxcr", device="stm32g474re")
+        # at most 200 hits however many are asked for
+        assert docs.doc_search("clock", limit=10**12).count("\n") < 250
+        query = "SELECT rowid FROM section_fts WHERE section_fts MATCH ?"
+        assert "invalid search query" in str(_raises(lambda: docs._match(docs._db(), query, ['"a" AND'])))
+        error = _raises(lambda: headers.device_condition("RCC_CR_HSEON", "g4", "target.bogus == 1"))
+        assert isinstance(error, UserError) and "target.<attribute> (platform, family, name" in str(error), error
+        # a pattern that Python's re takes minutes for, and one that is too slow for the regex package as well
+        start = time.monotonic()
+        assert "does not occur" in docs.doc_grep(r"(\w+\s?)+%%", doc="AN1015")
+        assert "pattern too slow" in str(_raises(lambda: docs.doc_grep(r"(.*e){12}%%", doc="AN1015")))
+        assert time.monotonic() - start < 10
+
+    def test_decode_values(self):
+        """The forms of values decode_register takes"""
+        out = svd.decode_register("stm32g474re", value="0x40021000: 63 0\nWarn : polling\n0x40021008: 1")
+        assert (
+            out.count(" @ 0x4002100") == 3
+            and "RCC.CFGR @ 0x40021008: RCC clock configuration register = 0x00000001" in out
+        )
+        assert "SW = 0x1 HSI" in out, out
+        assert "= 0x00000003" in svd.decode_register("stm32g474re", "RCC.CR", "0b11")
+        assert "= 0x00000063" in svd.decode_register("stm32g474re", "RCC.CR", "0d99")
+        assert "= 0x00000063" in svd.decode_register("stm32g474re", "0X40021000", "0X63")
+        assert "= 0x00000063" in svd.decode_register("stm32g474re", value="0X40021000: 63")
+        assert "32-bit" in str(_raises(lambda: svd.decode_register("stm32g474re", "RCC.CR", "-1")))
+        assert "(0x40021002 is not the start of the register, +2)" in svd.decode_register(
+            "stm32g474re", "0x40021002", "1"
+        )
+
+    def test_caches(self):
+        """A new index (another archive) forgets what the lookups cached"""
+        headers.device_header("g474re")
+        assert headers._headers.cache_info().currsize == 1
+        docs._index[0] = ("another index", 0)
+        docs._db()
+        assert headers._headers.cache_info().currsize == 0 and docs._index[0][0] != "another index"
+
     def test_figures(self):
         """Figure labels from SVG text and OCR"""
         box, labels, font = figures._parse("""<svg viewBox="0 0 100 100">
@@ -483,6 +581,11 @@ class Lookups(unittest.TestCase):
         with redirect_stdout(out):
             assert cli(["device_header", "f401re"]) == 0
         assert "stm32f401xe.h" in out.getvalue(), out.getvalue()
+        # booleans that default to True
+        for flag, subsections in (([], True), (["--no-subsections"], False), (["--subsections"], True)):
+            with redirect_stdout(out := io.StringIO()):
+                assert cli(["doc_section", "RM0440", "7", *flag]) == 0
+            assert ("### 7.1 Reset" in out.getvalue()) == subsections, out.getvalue()[:300]
         assert cli(["decode_register", "stm32h745zi", "--register", "RCC_CR"]) == 1
         with tempfile.TemporaryDirectory() as folder, redirect_stdout(io.StringIO()):
             png = Path(folder) / "f.png"

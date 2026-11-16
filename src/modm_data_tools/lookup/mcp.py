@@ -10,11 +10,13 @@ restarted whenever the code changes:
         --reload-dir src --reload-dir ../modm-data/src
 """
 
+import contextlib
 import importlib
 
 import anyio
 from mcp.server import NotificationOptions
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.stdio import stdio_server
 from mcp.types import ToolAnnotations
 
@@ -23,7 +25,6 @@ from ..figures import curves as figure_curves, graph as figure_graph, timing as 
 from . import markdown, tree
 from modm_data.svd import read
 from modm_data import cubemx
-from modm_data.clocks import evaluate as clocks_evaluate
 from ..clocks import solver as clocks_solver, configure as clocks_configure
 from ..clocks import modm as clocks_modm, modm_api as clocks_modm_api
 from modm_data.cubemx import clock_tree as cubemx_clock_tree, conditions as cubemx_conditions
@@ -31,9 +32,14 @@ from ..irq import sources as irq_sources, graph as irq_graph, interconnect as ir
 from modm_data import html2pinout
 from modm_data.html2pinout import signals as html2pinout_signals
 from . import clocks, core, docs, figures, headers, irq, pinout, svd, tools
+from .. import errors
+
+# the package exports its function evaluate under the name of the module
+clocks_evaluate = importlib.import_module("modm_data.clocks.evaluate")
 
 # dependencies before the modules that import from them
 MODULES = (
+    errors,
     tree,
     markdown,
     read,
@@ -128,7 +134,8 @@ async def _run():
 def http_app():
     """The server as an app for uvicorn, stateless, so that clients do not notice when it restarts"""
     # a restart loads all code, and stateless clients would not hear about changed tools anyway
-    server.remove_tool("reload_server")
+    with contextlib.suppress(ToolError):  # already removed by an earlier call
+        server.remove_tool("reload_server")
     docs.warm_up()
     app = server.streamable_http_app(stateless_http=True, json_response=True)
 
@@ -136,7 +143,7 @@ def http_app():
         # Clients keep a GET open for server messages, which a stateless server never sends, and uvicorn waits
         # for it forever on a restart. The spec allows refusing it with 405, then clients do not open one.
         if scope["type"] == "http" and scope["method"] == "GET":
-            await send({"type": "http.response.start", "status": 405, "headers": [(b"allow", b"POST, DELETE")]})
+            await send({"type": "http.response.start", "status": 405, "headers": [(b"allow", b"POST")]})
             await send({"type": "http.response.body", "body": b""})
             return
         await app(scope, receive, send)

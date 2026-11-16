@@ -11,10 +11,10 @@ import json
 import math
 import re
 import statistics
-import subprocess
 from pathlib import Path
 
-from .docs import ARCHIVE, CACHE, _db, _doc, _number
+from ..errors import UserError, UserRegex
+from .docs import ARCHIVE, CACHE, _db, _doc, _number, write_atomic
 
 # 4x4 cells of the drawing, named like a spreadsheet: columns A-D from the left, rows 1-4 from the top
 CELLS = 4
@@ -105,14 +105,14 @@ def _ocr(path: Path, run: bool = True) -> list[tuple[float, float, float, str]]:
         try:
             import Vision  # noqa: F401
         except ImportError:
-            raise RuntimeError(
+            raise UserError(
                 "this figure is a bitmap, its text needs the macOS OCR (pip install pyobjc-framework-Vision)"
             )
         labels = _merge(_vision(path), *(_vision(path, 1, tile) for tile in TILES), _vision(path, 6), _vision(path, 8))
         # from the top left like the SVG labels
         found = [(x, 1 - y - h, h, text) for (x, y, w, h), text in labels]
         cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(json.dumps(found))
+        write_atomic(cache, json.dumps(found))
     return [tuple(f) for f in json.loads(cache.read_text())]
 
 
@@ -123,10 +123,10 @@ def _placed(found, x: float, y: float, width: float, height: float):
 
 
 def _pixels(path: Path) -> tuple[int, int]:
-    out = subprocess.run(
-        ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)], capture_output=True, text=True
-    ).stdout
-    return tuple(int(n) for n in re.findall(r"pixel(?:Width|Height): (\d+)", out))
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.size
 
 
 def _images(svg: str) -> list[tuple[str, float, float, float, float]]:
@@ -237,12 +237,12 @@ def _figure(doc: str, figure: str):
     name, version, _ = _doc(db, doc)
     m = re.fullmatch(r"\s*(?:figure\s*)?(\d+)\s*", figure, re.I)
     if not m:
-        raise ValueError("figure must be a number like '17' or 'Figure 17'")
+        raise UserError("figure must be a number like '17' or 'Figure 17'")
     found = [f for f in _figures(db, name) if f[0] == m[1]]
     if not found:
-        raise ValueError(f"no figure {m[1]} in {name}, see doc_figures")
+        raise UserError(f"no figure {m[1]} in {name}, see doc_figures")
     if found[0][3] is None or not found[0][3].exists():
-        raise FileNotFoundError(f"figure {m[1]} of {name} has no image in the HTML archive")
+        raise UserError(f"figure {m[1]} of {name} has no image in the HTML archive")
     return name, version, found[0]
 
 
@@ -252,7 +252,7 @@ def doc_figures(doc: str, query: str = "", section: str = "") -> str:
     section and its subsections. Read a figure with doc_figure."""
     db = _db()
     name, version, _ = _doc(db, doc)
-    regex = re.compile(query, re.I) if query else None
+    regex = UserRegex(query, re.I) if query else None
     prefix = _number(db, name, section) if section else ""
     lines = []
     figures = _figures(db, name)
@@ -291,7 +291,7 @@ def doc_figure(doc: str, figure: str, image: bool = False, region: str = "") -> 
     head = f"{name} v{version} section {sect}, {caption or f'Figure {number}'}"
     if not image:
         if region:
-            raise ValueError("region is only for image=True")
+            raise UserError("region is only for image=True")
         cells = {}
         for x, y, text in labels:
             cells.setdefault(_cell(box, x, y), []).append(text)
@@ -307,7 +307,7 @@ def doc_figure(doc: str, figure: str, image: bool = False, region: str = "") -> 
     if region:
         m = re.fullmatch(r"\s*([A-D])([1-4])\s*(?::\s*([A-D])([1-4]))?\s*", region.upper())
         if not m:
-            raise ValueError("region must be a cell like 'C2' or a range like 'C2:D3', columns A-D, rows 1-4")
+            raise UserError("region must be a cell like 'C2' or a range like 'C2:D3', columns A-D, rows 1-4")
         c0, r0 = "ABCD".index(m[1]), int(m[2]) - 1
         c1, r1 = ("ABCD".index(m[3]), int(m[4]) - 1) if m[3] else (c0, r0)
         (c0, c1), (r0, r1) = sorted((c0, c1)), sorted((r0, r1))
@@ -354,7 +354,10 @@ def doc_figure_data(doc: str, figure: str, x: str = "") -> str:
     from ..figures import figure_data
 
     name, version, (number, caption, sect, path) = _figure(doc, figure)
-    values = [float(v) for v in x.replace(";", ",").split(",") if v.strip()] if x else None
+    try:
+        values = [float(v) for v in x.replace(";", ",").split(",") if v.strip()] if x else None
+    except ValueError:
+        raise UserError(f"x must be comma-separated numbers like '25,85', not '{x}'") from None
     result = figure_data(path, caption, values)
     head = f"{name} v{version} section {sect}, {caption or f'Figure {number}'}"
     if result is None:

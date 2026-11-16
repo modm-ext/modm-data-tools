@@ -8,6 +8,7 @@ line per bit field. `grid` and `column_names` give the plain table data for prog
 import re
 from collections import defaultdict
 
+from ..errors import UserError, UserRegex
 from .tree import Tree
 
 
@@ -235,7 +236,7 @@ def table_markdown(
     if table_rows and len(rows) > table_rows:
         return f"{title}[{len(rows)} rows x {len(names)} columns: {', '.join(names)}; read it with doc_table or table_markdown]"
     if where:
-        regex = re.compile(where, re.I)
+        regex = UserRegex(where, re.I)
         groups = defaultdict(list)
         for i, n in enumerate(names):
             if m := re.search(r" #(\d+)$", n):
@@ -281,9 +282,9 @@ def table_markdown(
         keep = [i for i in range(len(names)) if i in key or i in selected]
         names, rows = [names[i] for i in keep], [[r[i] for i in keep] for r in rows]
     if limit < 0 or offset < 0:
-        raise ValueError("limit and offset must not be negative, limit=0 shows all rows")
+        raise UserError("limit and offset must not be negative, limit=0 shows all rows")
     if offset and offset >= len(rows):
-        raise ValueError(f"offset {offset} is past the end, the table has {len(rows)} rows")
+        raise UserError(f"offset {offset} is past the end, the table has {len(rows)} rows")
     if where and not rows:
         return title + f"no row matches '{where}'"
     total, rows = len(rows), rows[offset : offset + limit] if limit else rows[offset:]

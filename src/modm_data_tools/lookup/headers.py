@@ -11,11 +11,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from modm_data.utils import root_path
+from ..errors import UserError, UserRegex
 
 # the checkout this package is in, or another one with the same ext folder
 MODM_DATA = Path(os.environ.get("MODM_DATA", root_path(".")))
 DB = MODM_DATA / "ext/modm-data/devices.db"
 HEADERS = MODM_DATA / "ext/stmicro/header"
+# the most hits a tool returns, a higher limit is clamped to it
+MAX_LIMIT = 200
 
 
 _connections = threading.local()
@@ -76,15 +79,16 @@ def _defines(header: Path) -> frozenset[str]:
 
 
 def normalize(device: str, empty: bool = False) -> str:
-    """A device prefix in one form for all tools: ' STM32G474RET6TR ' is 'g474ret6', '@m7' cores are kept.
-    An empty device is refused unless `empty` allows all devices."""
+    """A device prefix in one form for all tools: ' STM32G474RET6TR ' is 'g474ret6', the CubeMX name STM32G474RETx
+    'g474ret', '@m7' cores are kept. An empty device is refused unless `empty` allows all devices."""
     name, _, core = device.strip().lower().replace(" ", "").partition("@")
     # lbuild targets name the silicon revision, e.g. stm32h743zit6/revy
     name = name.split("/")[0].removesuffix(".h").removeprefix("stm32")
-    # the packing of the ordering code (TR tape and reel) is not part of the device
-    name = re.sub(r"(?<=\d)(tr|x)$", "", name) if len(name) > 7 else name
+    # the packing of the ordering code (TR tape and reel) is not part of the device, nor the temperature range that
+    # CubeMX names x after the package letter
+    name = re.sub(r"(?<=\d)(tr|x)$|(?<=[a-z])x$", "", name) if len(name) > 7 else name
     if not name and not empty:
-        raise ValueError("no device given, e.g. 'stm32g474re'")
+        raise UserError("no device given, e.g. 'stm32g474re'")
     return name + (f"@{core}" if core else "")
 
 
@@ -111,7 +115,7 @@ def _select(device: str, empty: bool = False) -> dict[Path, list[str]]:
 
         names = sorted({p.split("@")[0] for parts in _headers().values() for p in parts})
         close = difflib.get_close_matches(f"stm32{device}", names, n=5, cutoff=0.6)
-        raise ValueError(f"no STM32 device matches '{device}'" + (f", similar: {' '.join(close)}" if close else ""))
+        raise UserError(f"no STM32 device matches '{device}'" + (f", similar: {' '.join(close)}" if close else ""))
     return found
 
 
@@ -126,7 +130,7 @@ def device_header(device: str) -> str:
 def header_devices(header: str) -> str:
     """All devices that use a device header, given as file name ('stm32g474xx.h') or define ('STM32G474xx')."""
     if not header.strip():
-        raise ValueError("no header given, e.g. 'stm32g474xx.h'")
+        raise UserError("no header given, e.g. 'stm32g474xx.h'")
     name = header.lower().removesuffix(".h") + ".h"
     for h, parts in _headers().items():
         if h.name == name:
@@ -137,11 +141,14 @@ def header_devices(header: str) -> str:
 def find_define(pattern: str, devices: str = "", limit: int = 20) -> str:
     """Which device headers define a macro matching the regex `pattern` (fullmatch), and which do not.
     `devices` limits the search to part names starting with it ('g4', 'stm32h7', ...). `limit` caps the macro
-    names shown per header (0 shows none). Without `devices` and with many headers, the answer is per family."""
-    regex = re.compile(pattern)
+    names shown per header (0 shows none, at most 200). Without `devices` and with many headers, the answer is per
+    family."""
+    limit = min(limit, MAX_LIMIT)
+    found = _select(devices, empty=True)
+    matches = _matching(pattern, found)
     have, lack = [], []
-    for h, parts in _select(devices, empty=True).items():
-        names = sorted(n for n in _defines(h) if regex.fullmatch(n))
+    for h, parts in found.items():
+        names = sorted(_defines(h) & matches)
         (have if names else lack).append((h, parts, names))
     lines = [
         f"{len(have)} headers ({sum(len(p) for _, p, _ in have)} devices) define it, "
@@ -180,6 +187,12 @@ def find_define(pattern: str, devices: str = "", limit: int = 20) -> str:
     return "\n".join(lines)
 
 
+def _matching(pattern: str, headers) -> set[str]:
+    """The macros of the headers that the regex `pattern` matches in full, each name only tried once"""
+    regex = UserRegex(pattern)
+    return {n for n in set().union(*map(_defines, headers)) if regex.fullmatch(n)}
+
+
 def device_condition(pattern: str, family: str = "", condition: str = "") -> str:
     """lbuild template condition for the devices whose header defines a macro matching the regex `pattern`
     (fullmatch), e.g. `%% set with_register = target.name in ["b0", "b1"]`, one per family.
@@ -189,9 +202,9 @@ def device_condition(pattern: str, family: str = "", condition: str = "") -> str
     if condition:
         _check(condition)
     if condition and not family:
-        raise ValueError("checking a condition needs the family it is meant for, e.g. family='g0'")
-    regex, ids = re.compile(pattern), _identifiers()
-    matched = {p for h, parts in _headers().items() if any(regex.fullmatch(n) for n in _defines(h)) for p in parts}
+        raise UserError("checking a condition needs the family it is meant for, e.g. family='g0'")
+    ids, matches = _identifiers(), _matching(pattern, _headers())
+    matched = {p for h, parts in _headers().items() if _defines(h) & matches for p in parts}
     families = defaultdict(list)
     if family:
         # the header folder, also for families that devices.db folds into another one (WBA into WB)
@@ -204,7 +217,7 @@ def device_condition(pattern: str, family: str = "", condition: str = "") -> str
             families[target.family].append(part)
     if family and not families[fam]:
         known = [h for h in _headers() if h.parent.parent.name.removeprefix("stm32").startswith(fam)]
-        raise ValueError(
+        raise UserError(
             f"family {fam} has no devices in devices.db"
             + (", its headers exist, but conditions need the part names" if known else "")
         )
@@ -238,7 +251,7 @@ def _check(condition: str):
     try:
         tree = ast.parse(condition, mode="eval")
     except SyntaxError as e:
-        raise ValueError(f"invalid condition: {e.msg}")
+        raise UserError(f"invalid condition: {e.msg}") from None
     allowed = (
         ast.Expression,
         ast.BoolOp,
@@ -265,20 +278,28 @@ def _check(condition: str):
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and node.value.id == "target"
-            and not node.attr.startswith("_")
+            and node.attr in _ATTRIBUTES
         ):
             continue
         if isinstance(node, ast.Name) and node.id == "target" or isinstance(node, allowed):
             continue
-        raise ValueError(
-            f"invalid condition: only target.<attribute> compared with constants, not "
+        raise UserError(
+            f"invalid condition: only target.<attribute> ({', '.join(_ATTRIBUTES)}) compared with constants, not "
             f"'{ast.get_source_segment(condition, node) or type(node).__name__}'"
         )
 
 
+# the attributes of an lbuild target that conditions compare
+_ATTRIBUTES = ("platform", "family", "name", "pin", "size", "package", "temperature", "variant")
+
+
 def _evaluate(condition: str, parts: list[str]) -> list[str]:
     ids = _identifiers()
-    return [p for p in parts if eval(condition, {"__builtins__": {}}, {"target": ids[p]})]
+    try:
+        return [p for p in parts if eval(condition, {"__builtins__": {}}, {"target": ids[p]})]
+    except TypeError as e:
+        # e.g. target.name < 1
+        raise UserError(f"invalid condition: {e}") from None
 
 
 def _attribute_in(attribute: str, values) -> str:
@@ -501,7 +522,7 @@ def flash_latency(device: str) -> str:
     ).fetchall()
     if not rows:
         _select(device)
-        raise ValueError(f"no flash peripheral for 'stm32{device}' in devices.db")
+        raise UserError(f"no flash peripheral for 'stm32{device}' in devices.db")
     tables = defaultdict(list)
     for part, extra in rows:
         tables[json.dumps(json.loads(extra).get("latency"), sort_keys=True)].append(part)

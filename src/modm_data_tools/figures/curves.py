@@ -539,6 +539,8 @@ def audit(svg: Path) -> dict | None:
         background="#ffffff",
         width=round(w * SCALE),
         height=round(h * SCALE),
+        # the figures are sized in pt, which the default dpi=0 of resvg-py 0.5 rejects
+        dpi=72,
         resources_dir=str(svg.parent),
     )
     img = np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGB"), dtype=np.int16)

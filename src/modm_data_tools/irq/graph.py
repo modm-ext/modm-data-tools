@@ -15,6 +15,7 @@ import collections
 import re
 from functools import cache
 
+from ..errors import UserError
 from . import sources as src
 
 CORE = {"NVIC", "SCB", "SysTick", "MPU", "FPU", "DWT", "ITM", "CoreDebug", "TPI", "SCnSCB", "FPU_EX", "MEMORY"}
@@ -381,7 +382,7 @@ def build(device: str) -> dict:
     irqs = src.header_vectors(device)
     try:
         rm = src.rm_of(device)
-    except StopIteration:
+    except UserError:
         rm = None
     vtab = src.rm_vectors(rm, irqs) if rm else {}
     exti = dict(src.rm_exti(rm)) if rm else {}

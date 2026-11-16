@@ -5,9 +5,8 @@
 
 import functools
 import inspect
-import re
-import sqlite3
 
+from ..errors import UserError
 from . import clocks, docs, figures, headers, irq, pinout, svd
 
 TOOLS = (
@@ -38,19 +37,11 @@ TOOLS = (
     pinout.pin_functions,
 )
 
-# what the functions raise for wrong input, the message is meant for the user
-USER_ERRORS = (ValueError, RuntimeError, FileNotFoundError)
-
 
 def message(error: Exception) -> str | None:
-    """The message of an error caused by the input, None for a bug"""
-    if isinstance(error, USER_ERRORS):
-        return str(error)
-    if isinstance(error, re.error):
-        return f"invalid regex: {error}"
-    if isinstance(error, sqlite3.OperationalError):
-        return f'invalid search query, use words or "a phrase": {error}'
-    return None
+    """The message of an error caused by the input (a UserError, also invalid and too slow regexes and search
+    queries), None for a bug"""
+    return str(error) if isinstance(error, UserError) else None
 
 
 def register(server):
@@ -80,4 +71,5 @@ def register(server):
 
     annotations = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
     for function in TOOLS:
-        server.tool(annotations=annotations)(tool(function))
+        # the text only once: a return annotation would add an outputSchema and the answer again as structuredContent
+        server.tool(annotations=annotations, structured_output=False)(tool(function))

@@ -9,7 +9,8 @@ import re
 from functools import cache
 from pathlib import Path
 
-from .docs import ARCHIVE, CACHE
+from ..errors import UserError, UserRegex
+from .docs import ARCHIVE, CACHE, write_atomic
 from .headers import MODM_DATA, _devices, _short, normalize
 
 PINOUT = MODM_DATA / "ext/stmicro/pinout/nucleo.json"
@@ -94,8 +95,9 @@ def _extract(path: Path) -> dict[str, dict]:
         }
     EXTRACTED.mkdir(parents=True, exist_ok=True)
     # through JSON, so that the pin numbers are strings like in nucleo.json
-    cache.write_text(json.dumps(boards, separators=(",", ":")))
-    return json.loads(cache.read_text())
+    text = json.dumps(boards, separators=(",", ":"))
+    write_atomic(cache, text)
+    return json.loads(text)
 
 
 @cache
@@ -119,7 +121,7 @@ def _board(name: str) -> dict:
     """A board by its name in any spelling, e.g. 'nucleo-u5a5zj-q', 'u5a5zj' or 'disco f429', from nucleo.json if it
     was built, otherwise (and for the boards that nucleo.json leaves out) extracted from the latest user manual"""
     if not _key(name):
-        raise ValueError("no board given, e.g. 'NUCLEO-G474RE'")
+        raise UserError("no board given, e.g. 'NUCLEO-G474RE'")
     if PINOUT.exists() and len(found := _match(name, built := _pinouts(PINOUT.stat().st_mtime))) == 1:
         return built[found[0]]
     index = _index()
@@ -127,14 +129,14 @@ def _board(name: str) -> dict:
         import difflib
 
         close = found or difflib.get_close_matches(name.upper(), list(index), n=8, cutoff=0.6)
-        raise ValueError(
+        raise UserError(
             f"{len(found) or 'no'} boards match '{name}'" + (f": {' '.join(sorted(close))}" if close else "")
         )
     # Several manuals may name a board: like html2pinout, a NUCLEO board or else the manual of the fewest boards,
     # then the one that describes the most of it
     extracted = [(e[found[0]], len(e)) for path in index[found[0]] if found[0] in (e := _extract(path))]
     if not extracted:
-        raise ValueError(f"{', '.join(p.name for p in index[found[0]])} names {found[0]}, but has no pinout of it")
+        raise UserError(f"{', '.join(p.name for p in index[found[0]])} names {found[0]}, but has no pinout of it")
     return max(
         extracted,
         key=lambda e: (
@@ -163,7 +165,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
     if not device and (name := re.fullmatch(r"NUCLEO-(\w+?)(?:-[PQ])?", data["board"])):
         try:
             device = f"STM32{name[1]} (by the board name, {_part(name[1])[0]} in devices.db)"
-        except ValueError:
+        except UserError:
             pass
     out = [f"{data['board']}: {data['document']}, device {device or 'unknown'}"]
     shown = []
@@ -206,7 +208,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
             out.append(f"{name} ({c['type']}{', ' + c['side'] if c.get('side') else ''}):")
             out += lines
     if len(out) == 1:
-        raise ValueError(
+        raise UserError(
             f"no pin of {data['board']} matches"
             + (f" connector '{connector}'" if connector else "")
             + (f" query '{query}'" if query else "")
@@ -231,7 +233,7 @@ def _part(device: str) -> tuple[str, list[str]]:
         if pattern.match(p) and (not core or p.endswith("@" + core))
     ]
     if not parts:
-        raise ValueError(f"no STM32 device in devices.db matches '{device}'")
+        raise UserError(f"no STM32 device in devices.db matches '{device}'")
     # some names have a real X (STM32N657X0HxQ), so the parts that need the fewest x to be another character win
     wildcards = {p: sum(p[i] != "x" for i, c in enumerate(name) if c == "x") for p in parts}
     parts = [p for p in parts if wildcards[p] == min(wildcards.values())]
@@ -287,21 +289,21 @@ def pin_functions(device: str, query: str = "") -> str:
                 )
                 .fetchone()
             )
-            raise ValueError(
+            raise UserError(
                 f"{part} has no GPIO {query.upper()}"
                 + (f", it is a {kind[0]} pin of the package without signals in devices.db" if kind else "")
             )
         pins = {query.upper(): pins[query.upper()]}
     elif query:
-        re.compile(query)  # an invalid regex is reported at its position in the query, not in the pattern below
-        regex = re.compile(r"(?<![A-Z0-9])(?:" + query + r")" + (r"(?!\d)" if query[-1:].isdigit() else ""), re.I)
+        UserRegex(query)  # an invalid regex is reported at its position in the query, not in the pattern below
+        regex = UserRegex(r"(?<![A-Z0-9])(?:" + query + r")" + (r"(?!\d)" if query[-1:].isdigit() else ""), re.I)
         found = {}
         for pin, signals in pins.items():
             for signal, af in signals:
                 if regex.search(signal):
                     found.setdefault(signal, []).append(f"{pin} {_af(af)}" if af else pin)
         if not found:
-            raise ValueError(f"no signal of {part} matches '{query}'")
+            raise UserError(f"no signal of {part} matches '{query}'")
         return "\n".join(out + [f"{s}: {', '.join(p)}" for s, p in sorted(found.items())])
     for pin, signals in pins.items():
         afs = [f"{_af(af)} {s}" for s, af in sorted(signals, key=lambda x: (len(x[1]), x[1])) if af]

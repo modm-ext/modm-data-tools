@@ -5,6 +5,7 @@
 
 import re
 
+from ..errors import UserRegex
 from ..irq import graph as _graph, interconnect as _interconnect
 
 
@@ -41,7 +42,7 @@ def irq_events(device: str, query: str = "") -> str:
     for e in g["events"]:
         for v in e["vectors"] or ["(no vector)"]:
             by_vector.setdefault(v, []).append(e)
-    rx = re.compile(query, re.I) if query else None
+    rx = UserRegex(query, re.I) if query else None
     for name, v in g["vectors"].items():
         srcs = ", ".join(f"{s}[{','.join(t)}]" for s, t in v["sources"].items())
         evs = by_vector.get(name, [])
@@ -113,11 +114,12 @@ def interconnect(device: str, sink: str = "", signal: str = "") -> str:
     sink='TIM2', signal='TIM3_TRGO'."""
     ic = _interconnect.build(device)
     out = [f"{device}: {ic['rm']}, {len(ic['sinks'])} multiplexers"]
-    sink = rf"(?:{sink})(?!\d)" if re.search(r"\d$", sink) else sink
+    sinks = UserRegex(rf"(?:{sink})(?!\d)" if re.search(r"\d$", sink) else sink, re.I) if sink else None
+    signals = UserRegex(signal, re.I) if signal else None
     for name, s in ic["sinks"].items():
-        if sink and not (re.search(sink, name, re.I) or re.search(sink, name.split("_")[0], re.I)):
+        if sinks and not (sinks.search(name) or sinks.search(name.split("_")[0])):
             continue
-        values = {k: v for k, v in s["values"].items() if not signal or re.search(signal, k, re.I)}
+        values = {k: v for k, v in s["values"].items() if not signals or signals.search(k)}
         if not values:
             continue
         parts = " + ".join(f"bits {p + w - 1}:{p}" for p, w in s["parts"])

@@ -12,15 +12,17 @@ import os
 import re
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 import zipfile
 from pathlib import Path
 
 from modm_data.utils import cache_path
+from ..errors import UserError, UserRegex
 from .markdown import footnotes, grid, inline, markdown, pipe_table, register_layout, table_markdown
 from .tree import Tree
-from .headers import MODM_DATA
+from .headers import MAX_LIMIT, MODM_DATA
 
 # another archive, e.g. a local conversion, has an index of its own
 ARCHIVE = Path(os.environ.get("MODM_DOCS_ARCHIVE", MODM_DATA / "ext/stmicro/html-archive"))
@@ -44,8 +46,10 @@ REGISTER = re.compile(r"\(([A-Z][A-Z0-9]*(?:x|y|n)?[A-Za-z0-9]*_[A-Za-z0-9_]+)\)
 # the programming manuals name core registers without the peripheral, e.g. (HFSR) or (CFSR; UFSR+BFSR+MMFSR)
 REGISTER_BARE = re.compile(r"\(([A-Z][A-Z0-9]{2,}x?)(?:;[^)]*)?\)")
 CORE_KINDS = ("DS", "RM", "ES", "PM")
+# the most characters a tool returns, more is clamped to it
+MAX_CHARS = 100_000
 # a connection per thread, the MCP server runs tool calls in parallel and one connection mixes up their rows
-_lock, _checked, _open = threading.Lock(), [0.0], threading.local()
+_lock, _checked, _open, _index = threading.Lock(), [0.0], threading.local(), [None]
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -317,11 +321,26 @@ def _db() -> sqlite3.Connection:
             _checked[0] = time.time()
         # one connection as long as the index file stays the same, a rebuild replaces the file
         key = (target, target.stat().st_ino)
+        if _index[0] not in (None, key):
+            # a rebuild by this or another process: the archives moved, what was read from them is stale
+            clear_caches()
+        _index[0] = key
     if getattr(_open, "key", None) != key:
         if getattr(_open, "db", None) is not None:
             _open.db.close()
         _open.key, _open.db = key, sqlite3.connect(f"file:{target}?mode=ro", uri=True)
     return _open.db
+
+
+def clear_caches():
+    """Forgets what the lookups cached from the archives, devices.db and the headers"""
+    from . import clocks, core, headers, pinout, svd
+    from ..irq import graph, interconnect, sources
+
+    for module in (headers, core, svd, clocks, pinout, sources, graph, interconnect):
+        for function in vars(module).values():
+            if hasattr(function, "cache_clear"):
+                function.cache_clear()
 
 
 def _meta(path: Path) -> dict:
@@ -341,6 +360,13 @@ def _meta(path: Path) -> dict:
         db.close()
 
 
+def write_atomic(path: Path, text: str):
+    """Writes a cache file that other processes may read at the same time: they see the old or the new one"""
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, suffix=".tmp", delete=False) as f:
+        f.write(text)
+    os.replace(f.name, path)
+
+
 def warm_up():
     """Builds a stale index in the background, so that the first tool call does not wait for it."""
     threading.Thread(target=_db, daemon=True).start()
@@ -355,7 +381,7 @@ def _doc(db, doc: str) -> tuple[str, str, str]:
         "SELECT name, version, folder FROM document WHERE name = ? COLLATE NOCASE", (doc.strip(),)
     ).fetchone()
     if not row:
-        raise ValueError(f"no document {doc} in the HTML archive")
+        raise UserError(f"no document {doc} in the HTML archive")
     return row
 
 
@@ -420,11 +446,23 @@ def _fts(query: str, any_word: bool = False) -> str:
     def term(i, w):
         # a part number also finds documents that name its family with wildcards, e.g. STM32G071 in STM32G07xxx
         if re.fullmatch(r"stm32[a-z]+\d\w*", w.lower()):
-            return "(" + " OR ".join(f'"{w[:n]}"' for n in range(len(w), 7, -1)) + ")"
+            # a family name like STM32G0 is the prefix of its part numbers
+            stems = [f'"{w[:n]}"' for n in range(len(w), 7, -1)]
+            return "(" + " OR ".join(stems) + ")" if stems else f'"{w}"*'
         return f'"{w}"*' if prefix(i, w) else f'"{w}"'
 
     terms = [f'"{p}"' for p in phrases] + [term(i, w) for i, w in enumerate(words)]
     return (" OR " if any_word else " AND ").join(terms)
+
+
+def _match(db, sql: str, args: list) -> list:
+    """The rows of a full text query, a query that FTS5 cannot parse is the user's"""
+    try:
+        return db.execute(sql, args).fetchall()
+    except sqlite3.OperationalError as e:
+        if "fts5" not in str(e):
+            raise
+        raise UserError(f'invalid search query, use words or "a phrase": {e}') from None
 
 
 def _scope(db, device: str, kind: str, doc: str, column: str) -> tuple[str, list]:
@@ -436,7 +474,8 @@ def _scope(db, device: str, kind: str, doc: str, column: str) -> tuple[str, list
         where.append("(" + " OR ".join(f"{column} LIKE ?" for _ in kind.split(",")) + ")")
         args += [k.strip().upper() + "%" for k in kind.split(",")]
     if device:
-        parts = _parts(db, device)
+        if not (parts := _parts(db, device)):
+            raise UserError(f"no part number starts with '{device}', see device_docs")
         where.append(f"{column} IN (SELECT doc FROM device_doc WHERE rpn IN ({','.join('?' * len(parts)) or 'NULL'}))")
         args += parts
     return (" AND " + " AND ".join(where)) if where else "", args
@@ -445,29 +484,32 @@ def _scope(db, device: str, kind: str, doc: str, column: str) -> tuple[str, list
 def doc_search(query: str, device: str = "", kind: str = "", doc: str = "", limit: int = 10) -> str:
     """Full text search over all sections of the latest documents. All words must match, use "..." for a phrase.
     Also lists up to 5 figures whose caption or drawing text matches (labels of the SVGs, no OCR of photos).
-    Filters: `device` (only its documents), `kind` (e.g. 'RM,ES'), `doc` (e.g. 'RM0440')."""
+    Filters: `device` (only its documents), `kind` (e.g. 'RM,ES'), `doc` (e.g. 'RM0440'). `limit` is at most 200."""
     if not re.search(r"\w", query):
-        raise ValueError("no search words given")
+        raise UserError("no search words given")
     if limit < 1:
-        raise ValueError("limit must be at least 1")
+        raise UserError("limit must be at least 1")
+    limit = min(limit, MAX_LIMIT)
     db = _db()
     scope, args = _scope(db, device, kind, doc, "s.doc")
-    search = lambda match: db.execute(
+    search = lambda match: _match(
+        db,
         f"SELECT s.doc, s.number, s.title, s.chars, snippet(section_fts, 1, '**', '**', '...', 16) "
         f"FROM section_fts JOIN section s ON s.id = section_fts.rowid WHERE section_fts MATCH ? {scope} "
         # headings without text, e.g. of a table of contents, rank last
         f"ORDER BY s.chars < 50, bm25(section_fts, 30.0, 1.0) LIMIT ?",
         [match, *args, limit],
-    ).fetchall()
+    )
     rows, note = search(_fts(query)), ""
     # the text in the drawings, e.g. a clock name that only the clock tree has; read them with doc_figure
     figure_scope, figure_args = _scope(db, device, kind, doc, "t.doc")
-    figures = db.execute(
+    figures = _match(
+        db,
         f"SELECT t.doc, t.number, t.caption, t.section, snippet(figure_fts, 1, '**', '**', '...', 12) "
         f"FROM figure_fts JOIN tables t ON t.id = figure_fts.rowid WHERE figure_fts MATCH ? {figure_scope} "
         f"ORDER BY bm25(figure_fts, 5.0, 1.0) LIMIT ?",
         [_fts(query), *figure_args, min(limit, 5)],
-    ).fetchall()
+    )
     if not rows and not figures and len(re.findall(r"\w+", query)) > 1:
         rows, note = search(_fts(query, any_word=True)), "no section has all words, sections with some of them:\n"
     if not rows and not figures:
@@ -487,14 +529,16 @@ def doc_grep(regex: str, doc: str = "", device: str = "", kind: str = "", by: st
     per 1000 characters and the first hit in context. For what doc_search cannot find: identifiers with digits and
     underscores ('TIM\\d+_SMCR', 'DMAMUX\\d_C\\d+CR'), addresses, several spellings ('RXF?NE'). A high count with a low
     density is usually a big table, a high density the section about it. Case-sensitive unless the regex starts
-    with (?i). Needs `doc` or `device`, `kind` filters the documents of a device (e.g. 'RM,ES')."""
+    with (?i). Needs `doc` or `device`, `kind` filters the documents of a device (e.g. 'RM,ES'). `limit` is at most
+    200."""
     if not (doc or device):
-        raise ValueError("give a document like 'RM0440' or a device, all documents together are too many")
+        raise UserError("give a document like 'RM0440' or a device, all documents together are too many")
     if by not in ("section", "chapter"):
-        raise ValueError("by must be 'section' or 'chapter'")
+        raise UserError("by must be 'section' or 'chapter'")
     if limit < 1:
-        raise ValueError("limit must be at least 1")
-    pattern = re.compile(regex)
+        raise UserError("limit must be at least 1")
+    limit = min(limit, MAX_LIMIT)
+    pattern = UserRegex(regex)
     db = _db()
     if doc:
         _doc(db, doc)
@@ -508,7 +552,7 @@ def doc_grep(regex: str, doc: str = "", device: str = "", kind: str = "", by: st
     for name, number, title, body in rows:
         # register sections often name the register only in their heading
         body = f"{title}\n{body}"
-        hits = list(pattern.finditer(body))
+        hits = pattern.finditer(body)
         key = (name, number.split(".")[0] if by == "chapter" else number)
         group = groups.setdefault(key, {"title": title, "hits": 0, "chars": 0, "first": ""})
         group["chars"] += len(body)
@@ -546,7 +590,7 @@ def doc_toc(doc: str, section: str = "", depth: int = 2) -> str:
     """Headings of a document, or below one section, `depth` levels deep, with the text size of each section
     including its subsections (about what doc_section returns)."""
     if depth < 1:
-        raise ValueError("depth must be at least 1")
+        raise UserError("depth must be at least 1")
     db = _db()
     name, version, _ = _doc(db, doc)
     rows = db.execute("SELECT number, level, title, chars FROM section WHERE doc = ? ORDER BY id", (name,)).fetchall()
@@ -578,10 +622,10 @@ def _number(db, doc: str, section: str) -> str:
     if len(rows) == 1:
         return rows[0][0]
     if rows:
-        raise ValueError(
+        raise UserError(
             f"'{section}' matches several sections of {doc}, give the number: " + "; ".join(t for _, t in rows[:10])
         )
-    raise ValueError(f"no section '{section}' in {doc}, give a number like '13.6.1', see doc_toc")
+    raise UserError(f"no section '{section}' in {doc}, give a number like '13.6.1', see doc_toc")
 
 
 def _resolve_links(db, doc: str, html: str, section: str) -> str:
@@ -649,7 +693,8 @@ def _referenced(db, doc: str, kind: str, target: str, limit: int = 10) -> str:
 
 def doc_section(doc: str, section: str, subsections: bool = True, offset: int = 0, max_chars: int = 20000) -> str:
     """One section as Markdown, with its subsections unless `subsections` is false. Register layouts become one line
-    per bit field, large tables are only summarized (read them with doc_table). Long sections are paged by `offset`."""
+    per bit field, large tables are only summarized (read them with doc_table). Long sections are paged by `offset`,
+    `max_chars` is at most 100000."""
     db = _db()
     name, version, _ = _doc(db, doc)
     section = _number(db, name, section)
@@ -676,9 +721,10 @@ def doc_section(doc: str, section: str, subsections: bool = True, offset: int = 
             chunks.append(markdown(part, table_rows=40))
     text = "\n\n".join(c for c in chunks if c)
     if max_chars < 1 or offset < 0:
-        raise ValueError("max_chars must be positive and offset must not be negative")
+        raise UserError("max_chars must be positive and offset must not be negative")
+    max_chars = min(max_chars, MAX_CHARS)
     if offset and offset >= len(text):
-        raise ValueError(f"offset {offset} is past the end, the section has {len(text)} characters")
+        raise UserError(f"offset {offset} is past the end, the section has {len(text)} characters")
     page = text[offset : offset + max_chars]
     # pages end at a line break, or at a space inside a very long table row, not in a word
     if offset + max_chars < len(text):
@@ -701,15 +747,18 @@ def doc_section(doc: str, section: str, subsections: bool = True, offset: int = 
 
 
 def find_tables(query: str, device: str = "", kind: str = "", doc: str = "", limit: int = 20) -> str:
-    """Search table and figure captions and column headers, e.g. 'alternate function' or 'DMAMUX request'."""
+    """Search table and figure captions and column headers, e.g. 'alternate function' or 'DMAMUX request'.
+    `limit` is at most 200."""
     if not re.search(r"\w", query):
-        raise ValueError("no search words given")
+        raise UserError("no search words given")
     if limit < 1:
-        raise ValueError("limit must be at least 1")
+        raise UserError("limit must be at least 1")
+    limit = min(limit, MAX_LIMIT)
     db = _db()
     scope, args = _scope(db, device, kind, doc, "t.doc")
     match = _fts(query)
-    rows = db.execute(
+    rows = _match(
+        db,
         f"SELECT t.doc, t.kind, t.number, t.caption, t.section, t.rows, table_fts.header FROM table_fts "
         f"JOIN tables t ON t.id = table_fts.rowid WHERE table_fts MATCH ? {scope} "
         # captions with all words first, the shortest of them is the most specific: bm25 alone puts 'Programmed GPDMA1
@@ -717,7 +766,7 @@ def find_tables(query: str, device: str = "", kind: str = "", doc: str = "", lim
         f"ORDER BY table_fts.rowid IN (SELECT rowid FROM table_fts WHERE table_fts MATCH ?) DESC, length(t.caption), "
         f"bm25(table_fts, 5.0, 1.0) LIMIT ?",
         [match, *args, f"caption : ({match})", limit],
-    ).fetchall()
+    )
     if not rows:
         return f"no table found for {_fts(query)}"
     return "\n".join(
@@ -737,14 +786,14 @@ def doc_table(doc: str, table: str, columns: str = "", where: str = "", offset: 
     name, version, _ = _doc(db, doc)
     m = re.fullmatch(r"\s*(?:(table|figure)\s*)?(\d+)\s*", table, re.I)
     if not m:
-        raise ValueError("table must be a number like '12' or 'Table 12'")
+        raise UserError("table must be a number like '12' or 'Table 12'")
     rows = db.execute(
         "SELECT file, start, stop, section, caption, notes FROM tables WHERE doc = ? AND number = ? "
         "AND kind = ? ORDER BY id",
         (name, m[2], (m[1] or "table").lower()),
     ).fetchall()
     if not rows:
-        raise ValueError(f"no {m[1] or 'table'} {m[2]} in {name}, see find_tables")
+        raise UserError(f"no {m[1] or 'table'} {m[2]} in {name}, see find_tables")
     nodes, notes = [], []
     for file, start, stop, _, caption, end in rows:
         if nodes and "(continued)" not in caption:
@@ -773,19 +822,16 @@ def _generic(name: str) -> str:
 
 
 def _pattern(name: str) -> re.Pattern:
-    """Register name of the reference manual as regex, the lowercase x, y, n stand for instances or indices"""
-    return re.compile(
-        "".join(
-            f"(?P<{c}>[A-Z0-9]+)"
-            if c in "xyn" and f"(?P<{c}>" not in name[:i]
-            else "[A-Z0-9]+"
-            if c in "xyn"
-            else re.escape(c)
-            for i, c in enumerate(name)
-        )
-        + "$",
-        re.I,
-    )
+    """Register name of the reference manual as regex, the lowercase x, y, n stand for instances or indices, a
+    letter repeated (TIMx_CCRx) is another index"""
+    seen, parts = set(), []
+    for c in name:
+        if c in "xyn":
+            parts.append("[A-Z0-9]+" if c in seen else f"(?P<{c}>[A-Z0-9]+)")
+            seen.add(c)
+        else:
+            parts.append(re.escape(c))
+    return re.compile("".join(parts) + "$", re.I)
 
 
 def _in_range(spec: str, value: str) -> bool:
@@ -903,7 +949,7 @@ def doc_register(register: str, device: str = "", doc: str = "") -> str:
     name in the manual ('DMAMUX_CxCR') or a concrete one ('GPIOA_MODER', 'TIM2.CR1', 'FDCAN1_CCCR', 'DMAMUX1_C3CR').
     A concrete instance only returns the sections for it, e.g. TIM2 the one of '(x = 2 to 5)'."""
     if not device and not doc:
-        raise ValueError("give a device or a document")
+        raise UserError("give a device or a document")
     db = _db()
     parts = [] if doc else _parts(db, device)
     docs = (
@@ -918,10 +964,10 @@ def doc_register(register: str, device: str = "", doc: str = "") -> str:
         ]
     )
     if not docs:
-        raise ValueError(f"no reference manual for '{device}', see device_docs")
+        raise UserError(f"no reference manual for '{device}', see device_docs")
     wanted = register.strip().replace(".", "_").replace(" ", "").upper()
     if not wanted:
-        raise ValueError("no register given, e.g. 'RCC_CR' or 'TIM2.CR1'")
+        raise UserError("no register given, e.g. 'RCC_CR' or 'TIM2.CR1'")
     found = _lookup(db, docs, wanted, bare=bool(doc) and docs[0].startswith("PM"))
     if not found and not doc:
         # core registers are in the programming manual, often without the peripheral, e.g. HFSR for SCB_HFSR
@@ -935,7 +981,7 @@ def doc_register(register: str, device: str = "", doc: str = "") -> str:
         found = _lookup(db, manuals, wanted, bare=True)
         docs += manuals
     if not found:
-        raise ValueError(f"no register {register} in {', '.join(docs)}, try doc_search")
+        raise UserError(f"no register {register} in {', '.join(docs)}, try doc_search")
     out = []
     if device and (instances := _instances(device, {r for _, _, r, _ in found}, register)):
         out.append(instances)
@@ -994,7 +1040,7 @@ def _svd_fields(device: str, names: set[str], register: str) -> set[str]:
         try:
             _, peripherals = svd._device(candidate)
             break
-        except (ValueError, FileNotFoundError):
+        except UserError:
             continue
     else:
         return set()
@@ -1024,15 +1070,18 @@ def _instances(device: str, names: set[str], register: str) -> str:
     """Addresses of the registers in the SVD generated from the header of the device"""
     from . import svd
 
+    concrete = register.strip().replace(".", "_").upper()
+    # the manual name itself (DMAMUX_CxCR, also in lower case) means all instances, a concrete one (fdcan1_cccr) only it
+    generic = any(n.upper() == concrete and any(c in n for c in "xyn") for n in names)
+
     for candidate in (device, f"{device}@m7", f"{device}@m4"):
         try:
             label, peripherals = svd._device(candidate)
             break
-        except (ValueError, FileNotFoundError):
+        except UserError:
             continue
     else:
         return ""
-    concrete = register.strip().replace(".", "_").upper()
     concrete = UNALIASED.get(concrete, concrete)
     # core registers of the programming manual have no peripheral prefix, e.g. CFSR for SCB.CFSR
     names = {UNALIASED.get(n.upper(), n) for n in names}
@@ -1049,17 +1098,16 @@ def _instances(device: str, names: set[str], register: str) -> str:
             short = _generic(full)
             if any(x.fullmatch(full) or x.fullmatch(short) for x in patterns):
                 # FDCAN1_CCCR only means FDCAN1, FDCAN_CCCR means all instances
-                generic = _generic(concrete) == concrete
                 found.append(
                     (
                         full == concrete
-                        or (generic and short == concrete)
+                        or (_generic(concrete) == concrete and short == concrete)
                         or ("_" not in concrete and full.endswith(f"_{concrete}")),
                         f"{p}.{r['name']} 0x{info['base'] + r['offset']:08X}",
                     )
                 )
     # a concrete instance only shows its own address, if the SVD names it differently none at all
-    if not any(c in register for c in "xyn"):
+    if not generic:
         found = [f for f in found if f[0]]
     return f"Addresses ({label} header SVD): " + ", ".join(a for _, a in found) if found else ""
 
