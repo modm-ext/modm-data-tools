@@ -253,7 +253,8 @@ def _decode(device: str, register: str = "", value: str = "") -> tuple[str, list
                         hidden += 1
                         continue
                     enum = f["values"].get(v)
-                    line += f" = {v:#x}" + (f" {enum[0]}" if enum else "")
+                    # numbers like PLLN = 0x55 (85) also in decimal
+                    line += f" = {v:#x}" + (f" {enum[0]}" if enum else f" ({v})" if v > 9 else "")
                 if f["description"]:
                     line += f": {f['description']}"
                 if raw is None and f["values"]:

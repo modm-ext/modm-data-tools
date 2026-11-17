@@ -197,7 +197,7 @@ def _matching(pattern: str, headers) -> set[str]:
 
 def device_condition(pattern: str, family: str = "", condition: str = "") -> str:
     """lbuild template condition for the devices whose header defines a macro matching the regex `pattern`
-    (fullmatch). One per family, e.g. `%% set with_register = target.name in ["b0", "b1"]`.
+    (fullmatch). One per family, e.g. `%% set with_fdcan3 = target.name in ["b0", "b1"]`.
     With `condition`, checks that existing condition instead and lists the devices it gets wrong."""
     # also accept the output of this tool
     condition = re.sub(r"^\s*(stm32\w+ \([^)]*\):\s*)?%%\s*set\s+\w+\s*=\s*", "", condition.strip())
@@ -224,17 +224,21 @@ def device_condition(pattern: str, family: str = "", condition: str = "") -> str
             + (", its headers exist, but conditions need the part names" if known else "")
         )
     lines = []
+    # named after the macro, FDCAN3_BASE as with_fdcan3
+    variable = "with_" + (m[0].lower() if (m := re.match(r"[A-Za-z][A-Za-z0-9]*", pattern)) else "register")
     for fam in sorted(families):
         universe, selected = families[fam], [p for p in families[fam] if p in matched]
         if not family and not selected:
             continue
         cond = condition or _condition([ids[p] for p in selected], [ids[p] for p in universe])
         result = set(_evaluate(cond, universe))
-        lines.append(f"stm32{fam} ({len(selected)} of {len(universe)} devices): %% set with_register = {cond}")
+        lines.append(f"stm32{fam} ({len(selected)} of {len(universe)} devices): %% set {variable} = {cond}")
         if missing := sorted(set(selected) - result):
             lines.append(f"  missing: {_by_name(missing)}")
         if extra := sorted(result - set(selected)):
             lines.append(f"  wrongly included: {_by_name(extra)}")
+        if condition and not missing and not extra:
+            lines.append(f"  correct: the condition selects exactly these {len(selected)} devices")
     return "\n".join(lines) or f"'{pattern}' is not defined in any header" + (f" of stm32{fam}" if family else "")
 
 

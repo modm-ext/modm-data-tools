@@ -363,6 +363,9 @@ def doc_figure_data(doc: str, figure: str, x: str = "") -> str:
     result = figure_data(path, caption, values)
     head = f"{name} v{version} section {sect}, {caption or f'Figure {number}'}"
     if result is None:
+        svg = path.read_text(encoding="utf-8", errors="replace")
+        if _images(svg) and "<text" not in svg:
+            return head + "\nno data: a bitmap without vector data, read it with doc_figure(image=True)"
         return head + "\nno data: not a chart, timing diagram, state machine or flowchart, see doc_figure"
     kind, text, verified = result
     status = "verified against the drawing" if verified else "UNVERIFIED, the check against the drawing failed"

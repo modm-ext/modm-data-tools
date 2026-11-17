@@ -176,7 +176,7 @@ class Lookups(unittest.TestCase):
         # conditions are checked against every device of the family, so they only differ in length
         assert (
             headers.device_condition("FDCAN_CCCR_INIT", "g0")
-            == 'stm32g0 (87 of 250 devices): %% set with_register = target.name >= "b0"'
+            == 'stm32g0 (87 of 250 devices): %% set with_fdcan = target.name >= "b0"'
         )
         out = headers.device_condition("TIM4_BASE", "f1")
         assert "\n" not in out and 'target.size not in ["4", "6"]' in out, out
@@ -260,7 +260,7 @@ class Lookups(unittest.TestCase):
         assert "FMC_Bank1_R 0xA0000000" in headers.peripheral_buses("g474re")
         assert "DMA1_Channel1..7" in headers.peripheral_buses("f103rb")
         out = headers.device_condition(
-            "FDCAN_CCCR_INIT", "g0", 'stm32g0 (87 of 250 devices): %% set with_register = target.name in ["b1"]'
+            "FDCAN_CCCR_INIT", "g0", 'stm32g0 (87 of 250 devices): %% set with_fdcan = target.name in ["b1"]'
         )
         assert 'missing: name "b0" (4 devices' in out, out
 
