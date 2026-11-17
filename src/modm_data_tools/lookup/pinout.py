@@ -176,13 +176,18 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
         lines = []
         for number, pin in c["pins"].items():
             signal = pin["signal"]
-            ids = [i for b in bridges.get(signal, []) for i in b["ids"]]
-            use = data["uses"].get(signal, {})
             # the manuals write - for empty cells, and repeat the signal in several columns
             values = {
                 k: "" if pin.get(k, "-") in ("-", signal) else pin[k]
                 for k in ("label", "pin", "net", "function", "remark")
             }
+            # a pin may carry several GPIOs, chosen by solder bridges ('PA3 / PC5') or wired together on the board
+            # (NUCLEO-G564RE 'PB12/PB9'): the bridges and board uses of all of them matter
+            gpios = list(
+                dict.fromkeys([signal] + re.findall(r"\bP[A-Z]\d{1,2}\b", values["label"] + " " + values["pin"]))
+            )
+            ids = [i for g in gpios for b in bridges.get(g, []) for i in b["ids"]]
+            use = next((data["uses"][g] for g in gpios if g in data["uses"]), {})
             fields = [
                 values["label"],
                 signal,
@@ -196,6 +201,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
                 continue
             label, _, raw, net, function, remark, _ = fields
             text = f"  {name}-{number}" + (f" {label}" if label else "") + f": {signal}"
+            text += f" (also {', '.join(gpios[1:])})" if len(gpios) > 1 else ""
             text += "".join(
                 f", {k} {v}" for k, v in (("pin", raw), ("net", net), ("function", function), ("remark", remark)) if v
             )
@@ -203,7 +209,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
                 text += f", on board: {use['use']} {use.get('label') or use.get('signal', '')}".rstrip()
             if ids:
                 text += f" [{' '.join(dict.fromkeys(ids))}]"
-                shown += [b for b in bridges[signal] if b not in shown]
+                shown += [b for g in gpios for b in bridges.get(g, []) if b not in shown]
             lines.append(text)
         if lines:
             out.append(f"{name} ({c['type']}{', ' + c['side'] if c.get('side') else ''}):")
