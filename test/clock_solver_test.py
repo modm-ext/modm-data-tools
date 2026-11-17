@@ -88,6 +88,12 @@ class ClockSolverTest(unittest.TestCase):
         self.assertEqual(r["config"]["PSI"], "12.5")
         self.assertFalse(evaluate(t, r["config"])["PSI"]["errors"])
 
+    def test_config_mux_kept(self):
+        # A mux chosen in config stays when the targets allow it, USB from PLL3 and not from the HSI48
+        s = solve_text(tree("STM32H743ZITx"), "SYSCLK=480M, USB_OTG_FS=48M", "HSE=8M, USBMult=PLL3")
+        self.assertTrue(s["ok"])
+        self.assertIn("PLL3", s["config"]["USBMult"])
+
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency
         t = tree("STM32H743ZITx")

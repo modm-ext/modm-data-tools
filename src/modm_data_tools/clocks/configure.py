@@ -289,6 +289,12 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
     locked = {find_node(tree, n) for n in (lock or "").split(",") if n.strip()}
     # A board's oscillator frequencies are facts, not choices
     locked |= {n for n in settings if tree["nodes"].get(n, {}).get("kind") in ("varied", "fixed")}
+    # The muxes chosen in config are the user's choice: first try to keep all of them, only then move them
+    muxes = {n for n in settings if tree["nodes"].get(n, {}).get("kind") == "mux"} - locked
+    if muxes:
+        kept = solve_text(tree, targets, config, use, ",".join(sorted(locked | muxes)), budget / 2)
+        if kept["ok"]:
+            return kept | {"locked": sorted(locked)}
     use_set = _peripherals(tree, [u for u in (use or "").split(",") if u.strip()] + list(goals))
     start = time.monotonic()
     # The board decides which external clocks exist: only those set in config count
@@ -400,6 +406,7 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
                         out |= {"config": partial["config"], "result": partial["result"]}
                         break
     out["seconds"] = time.monotonic() - start
+    out["moved"] = {n: (settings[n], out["config"].get(n)) for n in muxes if out["config"].get(n) != settings[n]}
     return out
 
 
@@ -483,6 +490,13 @@ def report(tree: dict, solved: dict, device: str = "", code: str | None = None) 
               for n, r in result.items() if n in nodes and r.get("used") and r.get("errors")]  # fmt: skip
     if errors and solved["ok"]:
         lines.append("warnings: " + "; ".join(errors))
+    usb = [p for p in list(solved["targets"]) + list(solved["use"]) if "USB" in p.upper() and p in nodes]
+    if any(re.search(r"(HSI)?48(RC|M)?$|RC48", _source_path(tree, result, p).split(" < ")[-1]) for p in usb):
+        lines.append("note: USB from the HSI48 needs the CRS synchronized to the USB SOF, or use a crystal clock.")
+    if moved := solved.get("moved"):
+        # no silent change of a choice the user made
+        lines.append("moved: " + ", ".join(f"{n} {a} -> {b or 'default'}" for n, (a, b) in moved.items())
+                     + " (the targets could not be met with these kept; lock them to insist)")  # fmt: skip
     text = config_text(tree, solved["config"])
     lines.append(f"config: {text or '(all defaults)'}")
     # factors whose macro is not just their number, e.g. PSI=18 is PSI_144MHZ_REF_8MHZ
