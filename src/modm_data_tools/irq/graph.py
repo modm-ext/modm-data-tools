@@ -66,7 +66,8 @@ PATCHES = [
 SHARED_ENABLE = [
     (r"TIM\d+", "BIE", ["B2IF", "SBIF"]),  # break2 and system break interrupt "if BIE=1"
     (r"(LP)?U?S?ART\d+", r"RXNEIE(_RXFNEIE)?", ["ORE:ORECF"]),
-    (r"(LP)?U?S?ART\d+", "EIE", ["NE:NECF/NCF", "FE:FECF"]),  # F0/F3/F7 manuals call NE 'NF', its clear NCF
+    # F0/F3/F7 manuals call NE 'NF', its clear NCF; EIE also enables ORE in multibuffer (DMA) mode and the SPI slave UDR
+    (r"(LP)?U?S?ART\d+", "EIE", ["NE:NECF/NCF", "FE:FECF", "ORE:ORECF", "UDR:UDRCF"]),
     (
         r"I2C\d+",
         "ERRIE",

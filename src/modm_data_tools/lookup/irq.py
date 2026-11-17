@@ -10,7 +10,10 @@ from ..irq import graph as _graph, interconnect as _interconnect
 
 
 def _bits(entry) -> str:
-    return f"{entry[1]}.{entry[2]}" if entry else "-"
+    if not entry:
+        return "-"
+    # header2svd names the DMAMUX channel 0 register CCR, the reference manual C0CR like the other channels
+    return f"{'C0CR' if entry[0].startswith('DMAMUX') and entry[1] == 'CCR' else entry[1]}.{entry[2]}"
 
 
 def irq_events(device: str, query: str = "") -> str:
@@ -123,9 +126,21 @@ def interconnect(device: str, sink: str = "", signal: str = "") -> str:
         if not values:
             continue
         parts = " + ".join(f"bits {p + w - 1}:{p}" for p, w in s["parts"])
+
+        def explain(v):
+            # the timer input ITRn of a TS value, and the value split into its register fields, lowest bits first
+            notes = [f"ITR{v if v < 4 else v - 8 + 4}"] if name.endswith("_TS") and (v < 4 or v >= 8) else []
+            if len(s["parts"]) > 1:
+                fields, rest = [], v
+                for p, w in s["parts"]:
+                    fields.append(f"{p + w - 1}:{p}={rest & ((1 << w) - 1):0{w}b}")
+                    rest >>= w
+                notes.append("bits " + " ".join(fields))
+            return f" ({', '.join(notes)})" if notes else ""
+
         out.append(
             f"{name} @0x{s['address']:08x} ({parts}): "
-            + ", ".join(f"{k}={v}" for k, v in sorted(values.items(), key=lambda x: x[1]))
+            + ", ".join(f"{k}={v}{explain(v)}" for k, v in sorted(values.items(), key=lambda x: x[1]))
         )
         for itr, r in s.get("remaps", {}).items():
             out.append(

@@ -38,8 +38,8 @@ USART = _peripheral(
     0x40013800,
     CR1=(0x00, {"PEIE": 8, "TCIE": 6, "RXNEIE": 5, "UE": 0}),
     CR3=(0x08, {"EIE": 0}),
-    ISR=(0x1C, {"TC": 6, "RXNE": 5, "ORE": 3, "NE": 2, "FE": 1, "PE": 0}),
-    ICR=(0x20, {"TCCF": 6, "ORECF": 3, "NECF": 2, "FECF": 1, "PECF": 0}),
+    ISR=(0x1C, {"UDR": 13, "TC": 6, "RXNE": 5, "ORE": 3, "NE": 2, "FE": 1, "PE": 0}),
+    ICR=(0x20, {"UDRCF": 13, "TCCF": 6, "ORECF": 3, "NECF": 2, "FECF": 1, "PECF": 0}),
 )
 
 
@@ -215,9 +215,12 @@ class Pairing(unittest.TestCase):
             ("FE", "CR3.EIE", "ISR.FE", "ICR.FECF"),
             ("NE", "CR3.EIE", "ISR.NE", "ICR.NECF"),
             ("ORE", "CR1.RXNEIE", "ISR.ORE", "ICR.ORECF"),
+            # EIE also enables the overrun in multibuffer (DMA) mode and the SPI slave underrun
+            ("ORE", "CR3.EIE", "ISR.ORE", "ICR.ORECF"),
             ("PE", "CR1.PEIE", "ISR.PE", "ICR.PECF"),
             ("RXNE", "CR1.RXNEIE", "ISR.RXNE", None),
             ("TC", "CR1.TCIE", "ISR.TC", "ICR.TCCF"),
+            ("UDR", "CR3.EIE", "ISR.UDR", "ICR.UDRCF"),
         ]
 
     def test_pair_by_name_dma_stream(self):
