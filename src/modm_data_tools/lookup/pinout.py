@@ -157,8 +157,8 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
     itself uses the GPIO for (ST-LINK VCP, LED, ...) and the solder bridges that change what the pin is connected to,
     with their default state (*).
     `connector` selects connectors by name or type ('CN10', 'morpho', 'arduino'). `query` selects pins by words that
-    must all occur in their label, GPIO, net, function or bridges, e.g. 'A6', 'ADC A7', 'D12', 'SB53' or a GPIO like
-    'PC2' to find all connector pins of that GPIO."""
+    must all occur in their label, GPIO, net, function, bridges or board use, e.g. 'A6', 'ADC A7', 'D12', 'SB53',
+    'LED', 'RMII' or a GPIO like 'PC2' to find all connector pins of that GPIO."""
     data = _board(board)
     bridges = {g: [b for b in data["bridges"] if g in b["gpios"]] for b in data["bridges"] for g in b["gpios"]}
     device = data["device"]
@@ -187,7 +187,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
                 dict.fromkeys([signal] + re.findall(r"\bP[A-Z]\d{1,2}\b", values["label"] + " " + values["pin"]))
             )
             ids = [i for g in gpios for b in bridges.get(g, []) for i in b["ids"]]
-            use = next((data["uses"][g] for g in gpios if g in data["uses"]), {})
+            uses = [(g, data["uses"][g]) for g in gpios if g in data["uses"]]
             fields = [
                 values["label"],
                 signal,
@@ -197,7 +197,9 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
                 values["remark"],
                 " ".join(ids),
             ]
-            if query and not _words(query, " ".join(fields)):
+            # what the board uses the pin for counts too: 'button', 'LD2', 'RMII'
+            board = " ".join(f"{u['use']} {u.get('label', '')} {u.get('signal', '')}" for _, u in uses)
+            if query and not _words(query, " ".join(fields + gpios) + " " + board):
                 continue
             label, _, raw, net, function, remark, _ = fields
             text = f"  {name}-{number}" + (f" {label}" if label else "") + f": {signal}"
@@ -205,8 +207,10 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
             text += "".join(
                 f", {k} {v}" for k, v in (("pin", raw), ("net", net), ("function", function), ("remark", remark)) if v
             )
-            if use:
-                text += f", on board: {use['use']} {use.get('label') or use.get('signal', '')}".rstrip()
+            for g, use in uses:
+                # which of the GPIOs the board uses, the VCP on PA3 of 'PA3 / PC5' is not on the pin by default
+                text += f", on board: {g + ' ' if len(gpios) > 1 else ''}{use['use']} {use.get('label') or use.get('signal', '')}"
+                text = text.rstrip()
             if ids:
                 text += f" [{' '.join(dict.fromkeys(ids))}]"
                 shown += [b for g in gpios for b in bridges.get(g, []) if b not in shown]
