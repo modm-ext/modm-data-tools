@@ -129,6 +129,11 @@ class Parsers(unittest.TestCase):
             assert isinstance(_raises(lambda: headers.normalize(empty)), UserError)
         assert headers.normalize("", empty=True) == ""
 
+    def test_synonyms(self):
+        """The old and new names of the bus roles find each other"""
+        assert re.search(docs.synonyms("I2C master transmitter"), "I2C controller transmitter")
+        assert re.search(docs.synonyms("target"), "slave", re.I)
+
     def test_user_regex(self):
         """Regexes from tool input: invalid and too slow ones are errors of the input, and stop in time"""
         assert "invalid regex" in str(_raises(lambda: UserRegex("RCC_(CR")))
@@ -225,6 +230,11 @@ class Lookups(unittest.TestCase):
         assert "PLLON = 0x1" in out and "other fields are 0" in out and "outside" not in out, out
         assert "URS = 0x1 COUNTER" in svd.decode_register("g474re", "0x40000000", "0x85")
         assert "0x48000400 +0x000 MODER" in svd.register_map("stm32g474re", "GPIOB")
+        # reference manual names: the channel number first, a final R
+        assert "GPDMA1.CSR0 @ 0x40020060" in svd.decode_register("stm32u575zi", "GPDMA1.C0SR", "0x4001")
+        assert "FLASH.BOOT4_PRG @" in svd.decode_register("stm32h755zi@m4", "FLASH.BOOT4_PRGR")
+        assert "memory map" in str(_raises(lambda: svd.decode_register("stm32f429zi", "0x20050000")))
+        assert "SRAM2_BASE = 0x2001C000UL" in headers.find_define("SRAM2_BASE", "stm32f429zi")
         try:
             svd.register_map("stm32h745zi", "RCC")
             raise AssertionError("dual-core device without core")

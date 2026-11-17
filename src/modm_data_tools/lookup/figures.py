@@ -14,7 +14,7 @@ import statistics
 from pathlib import Path
 
 from ..errors import UserError, UserRegex
-from .docs import ARCHIVE, CACHE, _db, _doc, _number, write_atomic
+from .docs import ARCHIVE, CACHE, _db, _doc, _number, synonyms, write_atomic
 
 # 4x4 cells of the drawing, named like a spreadsheet: columns A-D from the left, rows 1-4 from the top
 CELLS = 4
@@ -252,7 +252,8 @@ def doc_figures(doc: str, query: str = "", section: str = "") -> str:
     section and its subsections. Read a figure with doc_figure."""
     db = _db()
     name, version, _ = _doc(db, doc)
-    regex = UserRegex(query, re.I) if query else None
+    UserRegex(query) if query else None  # an invalid regex is reported at its position in the query
+    regex = UserRegex(synonyms(query), re.I) if query else None
     prefix = _number(db, name, section) if section else ""
     lines = []
     figures = _figures(db, name)

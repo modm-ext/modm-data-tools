@@ -439,6 +439,20 @@ def _size(chars: int) -> str:
     return f"{chars / 1000:.1f}k" if chars < 10000 else f"{chars // 1000}k"
 
 
+# Newer manuals renamed the bus roles, the older ones and most users still use the old names
+SYNONYMS = {"master": "controller", "slave": "target", "controller": "master", "target": "slave"}
+
+
+def synonyms(regex: str) -> str:
+    """A regex that also matches the other name of a bus role: master also finds controller"""
+    return re.sub(
+        r"\b(master|slave|controller|target)\b",
+        lambda m: f"(?:{m[1]}|{SYNONYMS[m[1].lower()]})",
+        regex,
+        flags=re.I,
+    )
+
+
 def _fts(query: str, any_word: bool = False) -> str:
     """Every word must match (or any with `any_word`), '"exact phrase"' stays a phrase"""
     phrases = re.findall(r'"([^"]+)"', query)
@@ -454,6 +468,8 @@ def _fts(query: str, any_word: bool = False) -> str:
             stems = [f'"{w[:n]}"' for n in range(len(w), 7, -1)]
             return "(" + " OR ".join(stems) + ")" if stems else f'"{w}"*'
         found = f'"{w}"*' if prefix(i, w) else f'"{w}"'
+        if other := SYNONYMS.get(w.lower()):
+            found = f'({found} OR "{other}"{"*" if prefix(i, w) else ""})'
         # subscripts are a separate word in the documents, TSAR is written T SAR and VREFINT V REFINT
         return f'({found} OR "{w[0]} {w[1:]}")' if len(w) >= 4 and w.isupper() and w.isalpha() else found
 
@@ -562,6 +578,10 @@ def doc_grep(regex: str, doc: str = "", device: str = "", kind: str = "", by: st
         # register sections often name the register only in their heading
         body = f"{title}\n{body}"
         hits = pattern.finditer(body)
+        if not hits and re.search(r"\b[A-Z] [A-Z0-9]", body):
+            # subscripts are a separate word in the text, C<sub>L1</sub> is 'C L1': CL1 or VDD find them too
+            body = re.sub(r"\b([A-Z]) (?=[A-Z0-9]{2})", r"\1", body)
+            hits = pattern.finditer(body)
         key = (name, number.split(".")[0] if by == "chapter" else number)
         group = groups.setdefault(key, {"title": title, "hits": 0, "chars": 0, "first": ""})
         group["chars"] += len(body)
@@ -1038,7 +1058,13 @@ def doc_register(register: str, device: str = "", doc: str = "") -> str:
             # only other chapters are for other devices, e.g. F105/F107 in RM0008; sections in the chapter of the
             # best one are alternate views of the register, e.g. LPUART_CR1 with FIFO enabled and disabled
             chapters = {s[2].split(".")[0] for s in sections if score[id(s)] >= best - 0.01}
-            other = [s for s in sections if score[id(s)] < best - 0.01 and s[2].split(".")[0] not in chapters]
+            # and in the same chapter, a section that shares almost no field is a heading typo of the manual, e.g.
+            # RCC_AHB1SMENR titled RCC_BDCR in RM0351
+            other = [
+                s
+                for s in sections
+                if score[id(s)] < best - 0.01 and (s[2].split(".")[0] not in chapters or score[id(s)] < best / 3)
+            ]
             sections = sorted((s for s in sections if s not in other), key=lambda s: -score[id(s)])
             if other:
                 out.append(

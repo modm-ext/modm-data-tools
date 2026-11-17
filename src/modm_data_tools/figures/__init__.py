@@ -14,6 +14,7 @@ lines, graphs must attach every connector end to a node and use all text. Result
 marked as unverified.
 """
 
+import re
 from pathlib import Path
 
 from . import curves, graph, timing
@@ -100,4 +101,11 @@ def figure_data(svg: Path, caption: str = "", x: list[float] = None) -> tuple[st
     if g := graph.extract(svg):
         results.append(("graph", graph.mermaid(g), _graph_verified(g["audit"])))
     verified = [r for r in results if r[2]]
+    if (
+        not verified
+        and re.search(r"(?i)\bflow|state|sequence|machine", caption)
+        and not re.search(r"(?i)timing", caption)
+    ):
+        # unverified both ways, the caption knows better: a flowchart with a dashed '...' line is no timing diagram
+        results.sort(key=lambda r: r[0] != "graph")
     return (verified or results or [None])[0]
