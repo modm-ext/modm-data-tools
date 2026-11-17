@@ -234,7 +234,7 @@ def table_markdown(
     if not header and not (columns or where or offset or limit) and (not table_rows or len(rows) <= table_rows):
         return title + "\n".join("- " + " | ".join(escape_cell(c) for c in r if c) for r in rows)
     if table_rows and len(rows) > table_rows:
-        return f"{title}[{len(rows)} rows x {len(names)} columns: {', '.join(names)}; read it with doc_table or table_markdown]"
+        return f"{title}[{len(rows)} rows x {len(names)} columns: {', '.join(names)}; read it with doc_table]"
     if where:
         regex = UserRegex(where, re.I)
         groups = defaultdict(list)

@@ -147,8 +147,13 @@ def _board(name: str) -> dict:
 
 
 def _words(query: str, text: str) -> bool:
-    """Every word of the query is in the text, but not inside another name: 'A7' is not in 'PA7' or 'A70'"""
-    return all(re.search(rf"(?<![A-Z0-9]){re.escape(word)}(?![A-Z0-9])", text, re.I) for word in query.split())
+    """Every word of the query is in the text, but not inside another name: 'A7' is not in 'PA7' or 'A70'.
+    Alternatives are separated by |: 'PA11|PA12'."""
+    return any(
+        all(re.search(rf"(?<![A-Z0-9]){re.escape(word)}(?![A-Z0-9])", text, re.I) for word in alternative.split())
+        for alternative in query.split("|")
+        if alternative.strip()
+    )
 
 
 def board_pinout(board: str, connector: str = "", query: str = "") -> str:
@@ -158,7 +163,7 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
     with their default state (*).
     `connector` selects connectors by name or type ('CN10', 'morpho', 'arduino'). `query` selects pins by words that
     must all occur in their label, GPIO, net, function, bridges or board use, e.g. 'A6', 'ADC A7', 'D12', 'SB53',
-    'LED', 'RMII' or a GPIO like 'PC2' to find all connector pins of that GPIO."""
+    'LED', 'RMII' or a GPIO like 'PC2' to find all connector pins of that GPIO; 'PA11|PA12' for either."""
     data = _board(board)
     bridges = {g: [b for b in data["bridges"] if g in b["gpios"]] for b in data["bridges"] for g in b["gpios"]}
     device = data["device"]
@@ -224,6 +229,12 @@ def board_pinout(board: str, connector: str = "", query: str = "") -> str:
             + (f" connector '{connector}'" if connector else "")
             + (f" query '{query}'" if query else "")
             + f", connectors: {', '.join(data['connectors'])}"
+            + (
+                f"; pins wired only on the board (LCD, memory, sensors) are in its user manual: "
+                f"doc_search '{query}' --doc {data['document'].split('-v')[0]}"
+                if query
+                else ""
+            )
         )
     for b in shown:
         states = "; ".join(

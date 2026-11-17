@@ -1246,6 +1246,23 @@ def _register_section(html: str, title: str) -> str:
             row[3] += f"<br>(bits {bits}) {text}"
             del described[bits]
     rows += [[bits, "", "", text] for bits, text in described.items()]
+    # one field split by the layout into adjacent parts, ETRSEL[3:2] at 17:16 and ETRSEL[1:0] at 15:14 or PGA_GAIN
+    # twice, is one row
+    i = 0
+    while i + 1 < len(rows):
+        (b1, f1, a1, d1), (b2, f2, a2, d2) = rows[i], rows[i + 1]
+        m1 = re.fullmatch(r"(\w+)\[(\d+):(\d+)\]", f1)
+        m2 = re.fullmatch(r"(\w+)\[(\d+):(\d+)\]", f2)
+        bits1, bits2 = b1.split(":"), b2.split(":")
+        parts = m1 and m2 and m1[1] == m2[1] and int(m1[3]) == int(m2[2]) + 1
+        same = f1 == f2 and f1 and not f1.startswith("Res") and "[" not in f1
+        if (parts or same) and a1 == a2 and not d2 and int(bits1[-1]) == int(bits2[0]) + 1:
+            bits = f"{bits1[0]}:{bits2[-1]}"
+            name = f"{m1[1]}[{m1[2]}:{m2[3]}]" if parts else f1
+            rows[i] = [bits, name, a1, d1.replace(f"(described as bits {bits}) ", "")]
+            del rows[i + 1]
+            continue
+        i += 1
     # fields without a name in the layout (PM0223 STK_CSR) are only described, sorted in by their bits
     if all(re.fullmatch(r"\d+(:\d+)?", r[0]) for r in rows):
         rows.sort(key=lambda r: -int(r[0].split(":")[0]))
