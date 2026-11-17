@@ -455,6 +455,9 @@ def _fts(query: str, any_word: bool = False) -> str:
             return "(" + " OR ".join(stems) + ")" if stems else f'"{w}"*'
         return f'"{w}"*' if prefix(i, w) else f'"{w}"'
 
+    if "|" in re.sub(r'"[^"]+"', " ", query) and not any_word:
+        # alternatives like 'consumption|current|IDD': any of them, each with all its words
+        return " OR ".join(f"({_fts(q)})" for q in query.split("|") if re.search(r"\w", q))
     terms = [f'"{p}"' for p in phrases] + [term(i, w) for i, w in enumerate(words)]
     return (" OR " if any_word else " AND ").join(terms)
 
@@ -695,6 +698,25 @@ def _referenced(db, doc: str, kind: str, target: str, limit: int = 10) -> str:
     return "Referenced from: " + ", ".join(f"§{n}" for n in rows[:limit]) + more
 
 
+def _drawing_text(path: Path) -> str:
+    """The text of an unnumbered drawing, like the pseudo-code of an erratum, as lines indented by their position"""
+    if not path.exists():
+        return ""
+    rows = {}
+    for attrs, body in re.findall(
+        r"<text([^>]*)>(.*?)</text>", path.read_text(encoding="utf-8", errors="replace"), re.S
+    ):
+        a = dict(re.findall(r'([\w-]+)="([^"]*)"', attrs))
+        if "x" in a and "y" in a and body.strip():
+            rows.setdefault(round(float(a["y"])), []).append((float(a["x"]), html_module.unescape(body).strip()))
+    if not rows:
+        return ""
+    left = min(x for row in rows.values() for x, _ in row)
+    return "\n".join(
+        " " * round((min(row)[0] - left) / 12) + " ".join(t for _, t in sorted(row)) for _, row in sorted(rows.items())
+    )
+
+
 def doc_section(doc: str, section: str, subsections: bool = True, offset: int = 0, max_chars: int = 20000) -> str:
     """One section as Markdown, with its subsections unless `subsections` is false. Register layouts become one line
     per bit field, large tables are only summarized (read them with doc_table). Long sections are paged by `offset`,
@@ -722,8 +744,16 @@ def doc_section(doc: str, section: str, subsections: bool = True, offset: int = 
         if head and 'class="rt"' in part and REGISTER.search(_text(head[3])):
             chunks.append(_register_section(part, _text(head[3])))
         elif part.strip():
+            # unnumbered drawings in the text are marked here and replaced by their text after the Markdown
+            part = re.sub(r'<object data="([^"]+\.svg)"[^>]*>\s*</object>', "\x03\\1\x03", part)
             chunks.append(markdown(part, table_rows=40))
     text = "\n\n".join(c for c in chunks if c)
+    folder = (ARCHIVE / file).parent
+    text = re.sub(
+        r"(?:- )?\x03([^\x03]+)\x03",
+        lambda m: f"```\n{t}\n```" if (t := _drawing_text(folder / m[1])) else "[drawing without text]",
+        text,
+    )
     if max_chars < 1 or offset < 0:
         raise UserError("max_chars must be positive and offset must not be negative")
     max_chars = min(max_chars, MAX_CHARS)
