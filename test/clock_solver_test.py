@@ -101,6 +101,17 @@ class ClockSolverTest(unittest.TestCase):
         self.assertEqual(s["result"]["SysCLKOutput"]["freq"], 480e6)
         self.assertEqual(s["result"]["FDCAN1"]["freq"], 125e6)
 
+    def test_n6_hse_and_maxima(self):
+        # The N6 core runs from the given HSE, a second maximum is solved after the first, no frac crash
+        s = solve_text(tree("STM32N657A0HxQ"), "CPU=max, HCLK=max", "HSE=48M")
+        self.assertTrue(s["ok"])
+        self.assertEqual(s["result"]["CpuClockOutput"]["freq"], 800e6)
+        self.assertGreater(s["result"]["AHBOutput"]["freq"], 100e6)
+        self.assertTrue(
+            _source_path(s_tree := tree("STM32N657A0HxQ"), s["result"], "CpuClockOutput").endswith("HSEOSC")
+        )
+        self.assertTrue(solve_text(s_tree, "CPU=max", "HSE=48M, PLL1Source=HSE")["ok"])
+
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency
         t = tree("STM32H743ZITx")

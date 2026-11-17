@@ -212,7 +212,9 @@ def restrict(tree: dict, settings: dict) -> dict:
 def prefer(tree: dict, source: str) -> dict:
     """The tree where the muxes upstream of SYSCLK only take inputs that come from `source`."""
     solver = Solver(tree)
-    upstream = solver.ancestors("SysCLKOutput") if "SysCLKOutput" in tree["nodes"] else set()
+    # the N6 has no SYSCLK, its cores and buses run from the SYSA, SYSB, ... muxes
+    cores = ["SysCLKOutput"] if "SysCLKOutput" in tree["nodes"] else ["CpuClockOutput", "AHBOutput"]
+    upstream = set().union(*(solver.ancestors(n) for n in cores if n in tree["nodes"]))
     return _without(tree, lambda mux, s: mux in upstream and source not in solver.ancestors(s))
 
 
@@ -303,20 +305,23 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
 
     cpu = next((n for n in _ALIASES["CPU"][:2] if n in tree["nodes"]), None)
 
-    def run(goals_now: dict, share: float, diagnose: bool = True) -> dict:
+    def run(goals_now: dict, share: float, diagnose: bool = True, start: dict | None = None) -> dict:
+        start = settings if start is None else start
         maxima = [n for n, (_, _, aim) in goals_now.items() if aim is None]
         if not maxima:
-            return solver.solve(settings, locked, goals_now, use_set, 0, budget * share, diagnose)
+            return solver.solve(start, locked, goals_now, use_set, 0, budget * share, diagnose)
         if len(maxima) > 1:
             # one maximum after the other, in the order given: CPU=max, HCLK=max is the fastest HCLK of the fastest CPU
-            first = run({k: v for k, v in goals_now.items() if k not in maxima[1:]}, share / 2, diagnose)
+            first = run({k: v for k, v in goals_now.items() if k not in maxima[1:]}, share / 2, diagnose, start)
             if not first["ok"]:
                 return first
             f = first["result"][maxima[0]]["freq"]
-            return run(goals_now | {maxima[0]: (f * (1 - 1e-9), f * (1 + 1e-9), f)}, share / 2, diagnose)
+            # from the first configuration, so that the N6 HCLK shares the PLL of the CPU instead of taking another
+            fixed = goals_now | {maxima[0]: (f * (1 - 1e-9), f * (1 + 1e-9), f)}
+            return run(fixed, share / 2, diagnose, first["config"])
         # Aim at the maximum, then step down through the frequencies the node can reach
         name, top = maxima[0], goals_now[maxima[0]][1]
-        reachable = [f for f in solver.reachable(name, settings, locked) if f <= top * (1 + 1e-9)]
+        reachable = [f for f in solver.reachable(name, start, locked) if f <= top * (1 + 1e-9)]
         rungs = reachable[:200] or [top]
         # SYSCLK=max is the fastest core: a slightly slower SYSCLK may let the CPU and HCLK run faster,
         # for example, 434 MHz on the STM32H7P instead of 435 MHz, whose HCLK would need a divider of 2.008
@@ -340,7 +345,7 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
             left = deadline - time.monotonic()
             # Only the last rung explains a failure
             last = diagnose and not best and (left <= budget * share / 5 or i == len(rungs))
-            r = solver.solve(settings, locked, trial, use_set, 0, max(min(left, budget * share / 5), 0.05), last)
+            r = solver.solve(start, locked, trial, use_set, 0, max(min(left, budget * share / 5), 0.05), last)
             # Two rungs out of time in a row: the next ones will not do better
             timeouts = timeouts + 1 if r.get("timeout") else 0
             if r["ok"]:
