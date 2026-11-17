@@ -250,6 +250,9 @@ def st_svd_path(device: str) -> Path | None:
     from modm_data.kg.stmicro import did_from_string
 
     part = headers.normalize(device)
+    if len(part.split("@")[0]) < 7 and (parts := sorted(p for ps in headers._select(device).values() for p in ps)):
+        # a family name like 'wba52' is the first part number of it, the identifier needs pins and flash
+        part = parts[0].removeprefix("stm32")
     did = did_from_string((f"stm32{part}" + "t6")[:13])  # the identifier wants a package and temperature
     node = _dfp_node(f"STM32{part.upper()}", did)
     if not node:

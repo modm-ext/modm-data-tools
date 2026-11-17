@@ -500,7 +500,9 @@ class Device(unittest.TestCase):
         assert "TIM2_TRGO" not in ts["values"]  # reserved: a timer does not trigger itself
         assert "TIM2_TRGO" not in sinks["TIM3_TS"]["values"] or sinks["TIM3_TS"]["values"]["TIM2_TRGO"] == 1
         text = lookup_irq.interconnect("stm32g474re", sink="TIM2", signal="TIM5")
-        assert "TIM2_TS @0x40000008 (bits 6:4 + bits 21:20): TIM5_TRGO=8" in text and "TIM20" not in text, text
+        assert (
+            "TIM2_TS TIM2.SMCR @0x40000008 (bits 6:4 + bits 21:20): TIM5_TRGO=8 (ITR4" in text and "TIM20" not in text
+        ), text
 
 
 if __name__ == "__main__":

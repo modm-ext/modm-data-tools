@@ -63,6 +63,8 @@ def irq_events(device: str, query: str = "") -> str:
             out.append(f"  RM: {v['description']}")
         if v["cubemx"]:
             out.append(f"  CubeMX: {v['cubemx']}")
+        if not evs and not re.fullmatch(r"EXTI\d+(_\d+)?", name):
+            out.append("  no events: neither the header nor the RM pairs an enable bit with a flag for it")
         dropped = [e for e in evs if e["in_rm"] is False]
         for e in evs:
             if e["in_rm"] is False:
@@ -115,8 +117,11 @@ def interconnect(device: str, sink: str = "", signal: str = "") -> str:
     'DAC1_TSEL1'), with the register value per signal and the ITRn remaps of the timer option register
     (F4 TIM2_OR.ITR1_RMP). `sink` and `signal` filter by regex, a number does not continue into another one
     (sink='TIM2' is not TIM20), e.g. sink='TIM2', signal='TIM3_TRGO'."""
+    from . import svd
+
     ic = _interconnect.build(device)
     out = [f"{device}: {ic['rm']}, {len(ic['sinks'])} multiplexers"]
+    peripherals = svd._device(device)[1]
     sinks = UserRegex(rf"(?:{sink})(?!\d)" if re.search(r"\d$", sink) else sink, re.I) if sink else None
     signals = UserRegex(signal, re.I) if signal else None
     for name, s in ic["sinks"].items():
@@ -138,8 +143,9 @@ def interconnect(device: str, sink: str = "", signal: str = "") -> str:
                 notes.append("bits " + " ".join(fields))
             return f" ({', '.join(notes)})" if notes else ""
 
+        register = next((f"{p}.{r['name']} " for p, r in svd._find(peripherals, f"0x{s['address']:08x}")), "")
         out.append(
-            f"{name} @0x{s['address']:08x} ({parts}): "
+            f"{name} {register}@0x{s['address']:08x} ({parts}): "
             + ", ".join(f"{k}={v}{explain(v)}" for k, v in sorted(values.items(), key=lambda x: x[1]))
         )
         for itr, r in s.get("remaps", {}).items():
@@ -147,4 +153,9 @@ def interconnect(device: str, sink: str = "", signal: str = "") -> str:
                 f"  {itr} remapped by {name.split('_')[0]}_{r['field']}: "
                 + ", ".join(f"{v}={t}" for v, t in r["options"].items())
             )
+    if len(out) == 1:
+        out.append(
+            "no multiplexer matches: only timer TS and DAC TSEL inputs are covered, other routes like a comparator to "
+            "a timer break are in the reference manual: doc_grep the signal, e.g. 'tim_brk_cmp1|BKCMP1E'"
+        )
     return "\n".join(out)
