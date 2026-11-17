@@ -186,17 +186,23 @@ def _line(name: str, node: dict, macros: bool = False) -> str:
     return " ".join(parts)
 
 
-def _find(tree: dict, name: str) -> str:
-    nodes = tree["nodes"]
-    if name in nodes:
-        return name
-    lower = {n.lower(): n for n in nodes} | {n["param"].lower(): k for k, n in nodes.items() if "param" in n}
-    if name.lower() in lower:
-        return lower[name.lower()]
-    close = [n for n in nodes if name.lower() in n.lower()][:8]
-    raise UserError(
-        f"no node '{name}' in the clock tree of {tree['device']}" + (f", similar: {', '.join(close)}" if close else "")
-    )
+def _find(tree: dict, name: str) -> list[str]:
+    """The nodes a name stands for: a node, parameter, peripheral, an alias like SYSCLK or PCLK1 like in clock_solve, or
+    a peripheral family like FDCAN for all its instances"""
+    from ..clocks.configure import find_node
+
+    try:
+        found = find_node(tree, name)
+        return [found] if found in tree["nodes"] else [tree["clocks"][found]]
+    except UserError:
+        family = [n for n in tree["nodes"] if re.fullmatch(rf"{re.escape(name)}\d+", n, re.I)]
+        if family:
+            return family
+        close = [n for n in tree["nodes"] if name.lower() in n.lower()][:8]
+        raise UserError(
+            f"no node '{name}' in the clock tree of {tree['device']}"
+            + (f", similar: {', '.join(close)}" if close else "")
+        ) from None
 
 
 def _config(text: str) -> dict[str, str]:
@@ -259,8 +265,9 @@ def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> 
         else partname
     )
     lines = [
-        f"{header}: drawing {tree['tree']}, RCC {tree['rcc']}, "
-        f"{sum(n['kind'] != 'peripheral' for n in nodes.values())} nodes, {len(tree['clocks'])} peripherals"
+        f"{header}: drawing {tree['tree']}, "
+        + (f"RCC {tree['rcc']}, " if tree.get("rcc") else "")
+        + f"{sum(n['kind'] != 'peripheral' for n in nodes.values())} nodes, {len(tree['clocks'])} peripherals"
     ]
     options = evaluated["options"]["setting"] if result else tree["options"]
     if options:
@@ -269,7 +276,7 @@ def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> 
         lines.append("modes: " + "; ".join(f"{k}={'|'.join(v)}" for k, v in tree["modes"].items()))
 
     if node:
-        for name in (_find(tree, n.strip()) for n in node.split(",") if n.strip()):
+        for name in dict.fromkeys(f for n in node.split(",") if n.strip() for f in _find(tree, n.strip())):
             lines.append("")
             lines.append(line(name, macros=True))
             # the path from the clock source through the chosen mux inputs

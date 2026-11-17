@@ -375,10 +375,30 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
         }
         # Which targets stand in each other's way: each one left out in turn
         if len(goals) > 1 and not any(u["id"] for u in r["unmet"]):
+
+            def attempt(wanted):
+                # like the full search, from the crystal first
+                nonlocal solver
+                if "HSEOSC" in settings:
+                    solver = Solver(prefer(available, "HSEOSC"))
+                    found = run(wanted, 0.3 / len(goals), diagnose=False)
+                    solver = Solver(available)
+                    if found["ok"]:
+                        return found
+                return run(wanted, 0.3 / len(goals), diagnose=False)
+
             for name in goals:
-                rest = {k: v for k, v in goals.items() if k != name}
-                if run(rest, 0.3 / len(goals), diagnose=False)["ok"]:
+                if (partial := attempt({k: v for k, v in goals.items() if k != name}))["ok"]:
                     out["conflicts"].append(name)
+                    # the result shown leaves out the last conflicting target, the others come first for the user
+                    out |= {"config": partial["config"], "result": partial["result"], "left_out": name}
+            if name := out.get("left_out"):
+                # and gets that target as close as it can
+                lo, hi, aim = goals[name]
+                for tolerance in (0.01, 0.1, 0.25) if aim else ():
+                    if (partial := attempt(goals | {name: (aim * (1 - tolerance), aim * (1 + tolerance), aim)}))["ok"]:
+                        out |= {"config": partial["config"], "result": partial["result"]}
+                        break
     out["seconds"] = time.monotonic() - start
     return out
 
@@ -438,6 +458,8 @@ def report(tree: dict, solved: dict, device: str = "", code: str | None = None) 
             lines.append(f"  {solved['conflicts'][0]} does not fit with the other targets, without it they solve.")
         elif solved["conflicts"]:
             lines.append(f"  {', '.join(solved['conflicts'])} conflict: leaving out any one of them solves the rest.")
+        if solved.get("left_out"):
+            lines.append(f"  the configuration below solves every target except {solved['left_out']}.")
         if solved["problems"]:
             lines.append("  closest candidate breaks: " + "; ".join(_problem(p) for p in solved["problems"][:6]))
         if solved["timeout"]:
@@ -463,6 +485,18 @@ def report(tree: dict, solved: dict, device: str = "", code: str | None = None) 
         lines.append("warnings: " + "; ".join(errors))
     text = config_text(tree, solved["config"])
     lines.append(f"config: {text or '(all defaults)'}")
+    # factors whose macro is not just their number, e.g. PSI=18 is PSI_144MHZ_REF_8MHZ
+    named = []
+    for k, v in _settings(tree, solved["config"]).items():
+        for d in nodes.get(k, {}).get("domain", ()):
+            try:
+                same = d.get("macro") and abs(float(d["factor"]) - float(v)) < 1e-9
+            except (KeyError, TypeError, ValueError):
+                same = False
+            if same and not re.search(rf"(?<![\d.]){float(v):g}$", d["macro"]):
+                named.append(f"{k}={d['macro']}")
+    if named:
+        lines.append("macros: " + ", ".join(named))
     if solved["ok"]:
         lines.append("next: pass this config back with more targets or use items; it keeps these choices where it can.")
     else:
