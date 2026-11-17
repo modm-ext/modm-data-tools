@@ -99,7 +99,20 @@ def _find(peripherals: dict, register: str) -> list[tuple[str, dict]]:
             if info["base"] + r["offset"] <= address < info["base"] + r["offset"] + r["size"] // 8
         ]
     name = register.upper().replace(".", "_")
-    return [(p, r) for p, info in peripherals.items() for r in info["registers"] if f"{p}_{r['name']}".upper() == name]
+    found = [(p, r) for p, info in peripherals.items() for r in info["registers"] if f"{p}_{r['name']}".upper() == name]
+    if found:
+        return found
+    # the reference manual names of registers that the header names differently: the channel number first
+    # (GPDMA C0SR is CSR0) or with a final R (FLASH_BOOT4_PRGR is BOOT4_PRG)
+    for p, info in peripherals.items():
+        if not name.startswith(p.upper() + "_"):
+            continue
+        rest = name[len(p) + 1 :]
+        names = {rest[:-1], rest + "R"}
+        if m := re.fullmatch(r"C(\d+)([A-Z]+\d?)", rest):
+            names.add(f"C{m[2]}{m[1]}")
+        found += [(p, r) for r in info["registers"] if r["name"].upper() in names]
+    return found
 
 
 def register_map(device: str, peripheral: str) -> str:
@@ -219,7 +232,12 @@ def _decode(device: str, register: str = "", value: str = "") -> tuple[str, list
             raise UserError("give a register or a value with an address like mdw prints it")
         found = _find(peripherals, target)
         if not found:
-            out.append(f"no register at {target} in {name}" if address is not None else "")
+            out.append(
+                f"no register at {target} in {name}, memory (SRAM, flash) is in the memory map of the reference "
+                "manual: find_tables 'memory map'"
+                if address is not None
+                else ""
+            )
             if address is None:
                 # e.g. SCB.CFSR on a Cortex-M0+, which has no configurable faults
                 head, _, rest = register.strip().replace(".", "_").partition("_")
@@ -227,6 +245,11 @@ def _decode(device: str, register: str = "", value: str = "") -> tuple[str, list
                     raise UserError(
                         f"{head} of {name} has no register {rest}, it has: "
                         f"{' '.join(r['name'] for r in info['registers'])}"
+                    )
+                if re.fullmatch(r"0[xX][0-9a-fA-F_]+", register.strip()):
+                    raise UserError(
+                        f"no peripheral register at {register} in {name}; memory like SRAM and flash is in the "
+                        "memory map of the reference manual: find_tables 'memory map'"
                     )
                 raise UserError(f"no register {register} in {name}, see register_map")
             continue

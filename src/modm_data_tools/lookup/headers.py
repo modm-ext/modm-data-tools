@@ -80,6 +80,15 @@ def _defines(header: Path) -> frozenset[str]:
     return frozenset(re.findall(r"^\s*#\s*define\s+(\w+)", text, re.M))
 
 
+def _values(header: Path) -> dict[str, str]:
+    """The value of every macro of a header, without its comment"""
+    text = header.read_text(encoding="utf-8", errors="replace")
+    return {
+        n: re.sub(r"\s*(/\*.*|//.*)$", "", v).strip()
+        for n, v in re.findall(r"^\s*#\s*define\s+(\w+)[ \t]+(.*\S)", text, re.M)
+    }
+
+
 def normalize(device: str, empty: bool = False) -> str:
     """A device prefix in one form for all tools: ' STM32G474RET6TR ' is 'g474ret6', the CubeMX name STM32G474RETx
     'g474ret', '@m7' cores are kept. An empty device is refused unless `empty` allows all devices."""
@@ -172,7 +181,16 @@ def find_define(pattern: str, devices: str = "", limit: int = 20) -> str:
         names = sorted({n for _, _, ns in have for n in ns})
         if names and limit > 0:
             lines.append(f"macros: {shown(names)}")
-        return "\n".join(lines + ["(use devices='g4' etc. for the headers of one family)"])
+        return "\n".join(lines + ["(narrow devices to a family like 'g4' for the headers of one family)"])
+    if len(have) == 1 and 0 < len(have[0][2]) <= limit:
+        # one header: the values too, e.g. SRAM2_BASE = (SRAM1_BASE + 0x1C000UL)
+        values = _values(have[0][0])
+        lines.append(f"\nDefined in {have[0][0].name} [{_short(have[0][1])}]:")
+        lines += [f"{n} = {values.get(n, '')}".rstrip(" =") for n in have[0][2]]
+        if lack:
+            lines.append("\nNot defined in:")
+            lines += [f"{h.name} [{_short(parts)}]" for h, parts, _ in lack]
+        return "\n".join(lines)
     if have:
         lines.append("\nDefined in:")
         common = have[0][2] if all(names == have[0][2] for _, _, names in have) else None
