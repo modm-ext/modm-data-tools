@@ -94,6 +94,13 @@ class ClockSolverTest(unittest.TestCase):
         self.assertTrue(s["ok"])
         self.assertIn("PLL3", s["config"]["USBMult"])
 
+    def test_maxima(self):
+        # A second maximum is solved after the first: the fastest FDCAN of the fastest SYSCLK
+        s = solve_text(tree("STM32H743ZITx"), "SYSCLK=max, FDCAN=max", "HSE=25M")
+        self.assertTrue(s["ok"])
+        self.assertEqual(s["result"]["SysCLKOutput"]["freq"], 480e6)
+        self.assertEqual(s["result"]["FDCAN1"]["freq"], 125e6)
+
     def test_core_stays(self):
         # A kernel clock target that needs another PLL source keeps SYSCLK at its frequency
         t = tree("STM32H743ZITx")

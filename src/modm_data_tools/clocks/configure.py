@@ -307,6 +307,13 @@ def solve_text(tree: dict, targets: str, config: str = "", use: str = "", lock: 
         maxima = [n for n, (_, _, aim) in goals_now.items() if aim is None]
         if not maxima:
             return solver.solve(settings, locked, goals_now, use_set, 0, budget * share, diagnose)
+        if len(maxima) > 1:
+            # one maximum after the other, in the order given: CPU=max, HCLK=max is the fastest HCLK of the fastest CPU
+            first = run({k: v for k, v in goals_now.items() if k not in maxima[1:]}, share / 2, diagnose)
+            if not first["ok"]:
+                return first
+            f = first["result"][maxima[0]]["freq"]
+            return run(goals_now | {maxima[0]: (f * (1 - 1e-9), f * (1 + 1e-9), f)}, share / 2, diagnose)
         # Aim at the maximum, then step down through the frequencies the node can reach
         name, top = maxima[0], goals_now[maxima[0]][1]
         reachable = [f for f in solver.reachable(name, settings, locked) if f <= top * (1 + 1e-9)]

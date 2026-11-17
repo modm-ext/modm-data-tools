@@ -600,7 +600,8 @@ class Solver:
                     return None
             return trial
 
-        ranged = [c for c in target_list if c["hi"] - c["lo"] > c["aim"] * 1e-6]
+        # a target at its maximum has no aim
+        ranged = [c for c in target_list if c["aim"] is not None and c["hi"] - c["lo"] > c["aim"] * 1e-6]
         best_ok, oks, soft = None, 0, time.monotonic() + budget / 4
         try:
             # A candidate that breaks the limits of a node gets those limits as another
