@@ -57,6 +57,10 @@ _lock, _checked, _open, _index = threading.Lock(), [0.0], threading.local(), [No
 
 
 def _sha(repo: Path) -> str:
+    """The commit of an archive checkout, empty for a plain copy: inside the modm-data checkout git would
+    otherwise answer with the commit of modm-data, and every pull would rebuild the index"""
+    if not (repo / ".git").exists():
+        return ""
     return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 
 
