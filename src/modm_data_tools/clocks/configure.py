@@ -499,6 +499,12 @@ def report(tree: dict, solved: dict, device: str = "", code: str | None = None) 
         lines.append("macros: " + ", ".join(named))
     if solved["ok"]:
         lines.append("next: pass this config back with more targets or use items; it keeps these choices where it can.")
+    elif (name := solved.get("left_out")) and (aim := solved["targets"][name][2]) and (f := freq(name)):
+        # the tolerance that accepts what the other targets leave for it
+        tolerance = math.ceil(abs(f - aim) / aim * 1000) / 10
+        lines.append(
+            f"next: {name}={fmt_hz(aim).replace(' ', '')}~{tolerance:g}% accepts {fmt_hz(f)}, or change another target."
+        )
     else:
         lines.append(
             "next: relax a target (tolerance ~0.1%, a range or <=), unlock nodes, or change the sources in config."

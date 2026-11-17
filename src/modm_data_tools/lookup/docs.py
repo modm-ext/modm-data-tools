@@ -453,7 +453,9 @@ def _fts(query: str, any_word: bool = False) -> str:
             # a family name like STM32G0 is the prefix of its part numbers
             stems = [f'"{w[:n]}"' for n in range(len(w), 7, -1)]
             return "(" + " OR ".join(stems) + ")" if stems else f'"{w}"*'
-        return f'"{w}"*' if prefix(i, w) else f'"{w}"'
+        found = f'"{w}"*' if prefix(i, w) else f'"{w}"'
+        # subscripts are a separate word in the documents, TSAR is written T SAR and VREFINT V REFINT
+        return f'({found} OR "{w[0]} {w[1:]}")' if len(w) >= 4 and w.isupper() and w.isalpha() else found
 
     if "|" in re.sub(r'"[^"]+"', " ", query) and not any_word:
         # alternatives like 'consumption|current|IDD': any of them, each with all its words

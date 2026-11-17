@@ -205,16 +205,6 @@ def _find(tree: dict, name: str) -> list[str]:
         ) from None
 
 
-def _config(text: str) -> dict[str, str]:
-    config = {}
-    for item in filter(None, (i.strip() for i in re.split(r"[,;\n]", text))):
-        key, sep, value = item.partition("=")
-        if not sep:
-            raise UserError(f"config items are name=value, not '{item}'")
-        config[key.strip()] = value.strip()
-    return config
-
-
 def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> str:
     """Clock tree of a device from STM32CubeMX with domains, limits and the clock of every peripheral.
     Its sources, muxes, dividers, multipliers and outputs with their domains, defaults (marked *), frequency limits
@@ -240,7 +230,10 @@ def clock_tree(device: str, node: str = "", config: str = "", use: str = "") -> 
     # the defaults also choose the path through the muxes, but their frequencies are only shown for a config
     used = {u.strip() for u in use.split(",") if u.strip()} if use else None
     try:
-        evaluated = evaluate_clock_tree(tree, _config(config), used)
+        # the names and aliases of clock_solve, HSE=8M is the HSE oscillator, HSE=ByPass its mode
+        from ..clocks.configure import parse_config
+
+        evaluated = evaluate_clock_tree(tree, parse_config(tree, config), used)
     except ValueError as e:
         # an unknown node or a value it cannot take, the message names them
         raise UserError(str(e)) from None

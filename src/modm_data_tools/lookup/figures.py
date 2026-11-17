@@ -261,7 +261,9 @@ def doc_figures(doc: str, query: str = "", section: str = "") -> str:
             continue
         labels = _content(svg)[1] if svg and svg.exists() else []
         texts = [t for _, _, t in labels]
-        if regex and not regex.search(caption) and not any(regex.search(t) for t in texts):
+        # subscripts are a separate word in captions, 'V REFINT versus temperature' is also found as VREFINT
+        joined = re.sub(r"\b([A-Za-z]) (?=[A-Z0-9]{2})", r"\1", caption)
+        if regex and not regex.search(caption) and not regex.search(joined) and not any(regex.search(t) for t in texts):
             continue
         preview = " | ".join(texts[:8]) + (f" ... ({len(texts)} labels)" if len(texts) > 8 else "")
         caption = re.sub(r"^Figure \d+\.\s*", "", caption) or "(no caption)"

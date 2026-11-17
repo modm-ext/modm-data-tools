@@ -72,8 +72,13 @@ class Curve:
 
     def __call__(self, x: float) -> float:
         xs, ys = zip(*self.points)
-        if not min(xs) <= x <= max(xs):
-            raise ValueError(f"x={x} is outside of the curve range {min(xs)}..{max(xs)}")
+        low, high = min(xs), max(xs)
+        # a curve read from the drawing may end a hair before the axis value it is drawn to, -39.98 for -40
+        inside = (
+            low / 1.02 <= x <= high * 1.02 if self.xlog else low - (high - low) / 100 <= x <= high + (high - low) / 100
+        )
+        if not inside:
+            raise ValueError(f"x={x} is outside of the curve range {low}..{high}")
         if self.xlog:
             return float(np.interp(math.log10(x), np.log10(xs), ys))
         return float(np.interp(x, xs, ys))
