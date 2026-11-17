@@ -42,10 +42,10 @@ class Parsers(unittest.TestCase):
 
         db = sqlite3.connect(":memory:")
         db.executescript(
-            "CREATE TABLE section (doc, number); CREATE TABLE tables (doc, number);"
+            "CREATE TABLE section (doc, number, title); CREATE TABLE tables (doc, number);"
             "CREATE TABLE links (doc, from_section, kind, target, href);"
         )
-        db.executemany("INSERT INTO section VALUES ('RM1', ?)", [("1",), ("1.1",), ("2",)])
+        db.executemany("INSERT INTO section VALUES ('RM1', ?, ?)", [("1", "One"), ("1.1", "Sub"), ("2", "Two")])
         db.execute("INSERT INTO tables VALUES ('RM1', '7')")
         one = (
             '<h2 id="section1">1 One</h2><p id="page3">See <a href="chapter_2_b.html#table7">Table 7</a>, '

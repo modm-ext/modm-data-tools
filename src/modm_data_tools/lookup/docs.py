@@ -714,6 +714,15 @@ def _referenced(db, doc: str, kind: str, target: str, limit: int = 10) -> str:
         )
         if kind != "section" or not (n == target or n.startswith(target + "."))
     ]
+    # the revision history links every changed section, which says nothing about the target
+    history = {
+        c
+        for (c,) in db.execute(
+            "SELECT number FROM section WHERE doc = ? AND number NOT LIKE '%.%' AND title LIKE '%revision history%'",
+            (doc,),
+        )
+    }
+    rows = [n for n in rows if n.split(".")[0] not in history]
     if not rows:
         return ""
     more = f" (+{len(rows) - limit} more)" if len(rows) > limit else ""
@@ -948,6 +957,8 @@ def _lookup(db, docs: list[str], wanted: str, bare: bool = False) -> list[tuple[
     programming manuals, the register without its peripheral (HFSR for SCB_HFSR)"""
     names = [wanted, *ALIASES.get(wanted, [])]
     names += [f"{n}R" for n in names if not n.endswith("R")]
+    # the header numbers the instance, the manual the register: COMP1_CSR is COMP_C1CSR (CxCSR)
+    names += [f"{m[1]}_C{m[2]}{m[3]}" for n in names if (m := re.fullmatch(r"([A-Z]+?)(\d+)_(\w+)", n))]
     if bare:
         names += [n.split("_", 1)[1] for n in names if "_" in n]
     for name in dict.fromkeys(names):
