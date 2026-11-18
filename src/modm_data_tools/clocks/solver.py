@@ -50,12 +50,21 @@ def factors_of(node: dict) -> list:
     return []
 
 
+def _count(node: dict) -> int:
+    """The number of values of `factors_of(node)` without the list, a fraction ranges over 2^24 values."""
+    if node.get("domain"):
+        return len(node["domain"])
+    if "range" in node:
+        return int(node["range"][1]) - int(node["range"][0]) + 1
+    return 0
+
+
 def is_variable(node: dict) -> bool:
     """:return: Whether the solver may move a node."""
     if node["kind"] == "mux":
         return len(node["inputs"]) > 1
     if node["kind"] in ("div", "mul", "mulfrac", "frac"):
-        return not node.get("rules") and len(factors_of(node)) > 1
+        return not node.get("rules") and _count(node) > 1
     return node["kind"] == "choice" and len(node.get("domain") or ()) > 1
 
 
@@ -83,7 +92,7 @@ class Solver:
     def __init__(self, tree: dict):
         self.tree = tree
         self.nodes = tree["nodes"]
-        self._ancestors, self._descendants, self._tiers = {}, {}, {}
+        self._ancestors, self._descendants, self._tiers, self._factors = {}, {}, {}, {}
         self.config = {}
         self.params = {n: node["param"] for n, node in self.nodes.items() if "param" in node}
         self._compiled = {}
@@ -278,13 +287,11 @@ class Solver:
         """A multiplier: every input frequency it can reach and the factors that land in [lo, hi], fractional last."""
         if not src:
             return
-        factors = set(factors_of(node))
+        factors, fractional = self.factor_set(name)
         frac_free = frac and frac not in A and frac not in F
         frac_now = (A.get(frac, self.current(frac)) or 0) / 8192 if frac and not frac_free else 0
         reached = self.reach(src, A, F)
         now = self.current(name)
-        # The STM32C5 PSI multiplies by 100 / 48 MHz
-        fractional = any(not float(f).is_integer() for f in factors)
         for r in reached:
             klo, khi = lo / r[0] - frac_now - 1e-9, hi / r[0] - frac_now + 1e-9
             kmin, kmax = math.ceil(klo), math.floor(khi)
@@ -323,6 +330,13 @@ class Solver:
                 continue
             if lo <= r[0] * (k + fr / 8192) <= hi:
                 yield {**A, **r[1], name: k, frac: fr}
+
+    def factor_set(self, name: str) -> tuple[set, bool]:
+        """The factors of a multiplier as a set, and whether one is fractional like the STM32C5 PSI's 100 / 48 MHz."""
+        if name not in self._factors:
+            factors = set(factors_of(self.nodes[name]))
+            self._factors[name] = (factors, any(not float(f).is_integer() for f in factors))
+        return self._factors[name]
 
     def reach(self, name: str, A: dict, F) -> list:
         """Every frequency a node can produce under A, with the settings it adds to A, a few per frequency."""
