@@ -1185,6 +1185,16 @@ def _instances(device: str, names: set[str], register: str) -> str:
     return f"Addresses ({label} header SVD): " + ", ".join(a for _, a in found) if found else ""
 
 
+BIT_LIST = r"\d+(?::\d+)?(?:(?:\s*,\s*|\s+and\s+)\d+(?::\d+)?)+"
+
+
+def _bit_set(bits: str) -> set[int]:
+    """The bit positions of "6:4" or "16", empty for generic bits like 2y+1:2y"""
+    if not (m := re.fullmatch(r"(\d+)(?::(\d+))?", bits)):
+        return set()
+    return set(range(int(m[2] or m[1]), int(m[1]) + 1))
+
+
 def _register_section(html: str, title: str) -> str:
     """Layout and bit descriptions of one register section joined into one table"""
     root = Tree(html).root
@@ -1198,7 +1208,10 @@ def _register_section(html: str, title: str) -> str:
             cells, _ = grid(node)
             for row in cells:
                 texts = [t for _, t in dict.fromkeys(row)]
-                if len(texts) >= 2 and (m := re.fullmatch(r"Bits? ?(\S+?)(?::(\S+))?(?: .*)?", texts[0], re.S)):
+                # one field split over several places, e.g. "Bits 16, 2:0" for SMS[3:0] or "Bits 27, 21, 11, 5" for TCIF[3:0]
+                if len(texts) >= 2 and (m := re.fullmatch(rf"Bits? ?({BIT_LIST})", texts[0].strip())):
+                    described[", ".join(re.split(r"\s*,\s*|\s+and\s+", m[1]))] = "\n".join(texts[1:])
+                elif len(texts) >= 2 and (m := re.fullmatch(r"Bits? ?(\S+?)(?::(\S+))?(?: .*)?", texts[0], re.S)):
                     # generic descriptions like "Bits 2y+1:2y" for repeated fields stay rows of their own
                     described[f"{m[1]}:{m[2]}" if m[2] and m[2] != m[1] else m[1]] = "\n".join(texts[1:])
         elif node.tag == "table":
@@ -1215,8 +1228,29 @@ def _register_section(html: str, title: str) -> str:
     rows = []
     for bits, field, access in layout:
         rows.append([bits, field, access if not field.startswith("Res") else "", described.pop(bits, "")])
-    # the manual sometimes numbers the bits differently in the layout and the description, then match by name
     key = lambda name: re.sub(r"\[.*|\s", "", name).upper()
+    # a description of several places is one row of all the layout fields at those bits
+    for bits, text in [(b, t) for b, t in described.items() if "," in b]:
+        places = set().union(*map(_bit_set, bits.split(", ")))
+        reserved = text.startswith("Reserved")
+        parts = [r for r in rows if not r[3] and r[1] and _bit_set(r[0]) and _bit_set(r[0]) <= places]
+        if reserved:
+            for r in parts:
+                if r[1].startswith("Res"):
+                    r[3] = text
+            del described[bits]
+            continue
+        parts = [r for r in parts if not r[1].startswith("Res")]
+        # by name if possible: RM0440 describes TS[2:0] as "Bits 16, 6:4", bit 16 is SMS[3]
+        if name := re.match(r"([^:\[]+)", text):
+            named = [r for r in parts if re.fullmatch(rf"{re.escape(key(name[1]))}\d*", key(r[1]))]
+            parts = named or parts
+        if parts:
+            index = rows.index(parts[0])
+            rows = [r for r in rows if r not in parts]
+            rows.insert(index, [bits, ", ".join(r[1] for r in parts), parts[0][2], text])
+            del described[bits]
+    # the manual sometimes numbers the bits differently in the layout and the description, then match by name
     for bits, text in list(described.items()):
         name = re.match(r"([^:]+):", text)
         reserved = text.startswith("Reserved")

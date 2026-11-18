@@ -35,4 +35,8 @@ class Tree(HTMLParser):
             self.node = node.parent
 
     def handle_data(self, data):
-        self.node.children.append(re.sub(r"\s+", " ", data))
+        node = self.node
+        while node.tag != "pre" and node.parent:
+            node = node.parent
+        # code listings keep their lines and indentation
+        self.node.children.append(data if node.tag == "pre" else re.sub(r"\s+", " ", data))

@@ -168,9 +168,11 @@ def find_define(pattern: str, devices: str = "", limit: int = 20) -> str:
     shown = lambda names: " ".join(names[:limit]) + (f" ... (+{len(names) - limit})" if len(names) > limit else "")
     if len(have) + len(lack) > 30:
         # per family, the headers that lack it are the interesting part
-        families = defaultdict(lambda: ([], []))
+        families, ids = defaultdict(lambda: ([], [])), _identifiers()
         for h, parts, names in have + lack:
-            families[h.parent.parent.name.removesuffix("xx").removesuffix("x")][0 if names else 1].append(h)
+            # the lbuild family like device_condition, the stm32h7pxx headers are H7, otherwise the header folder
+            family = f"stm32{ids[parts[0]].family}" if parts else h.parent.parent.name.removesuffix("xx").rstrip("x")
+            families[family][0 if names else 1].append(h)
         for family, (yes, no) in sorted(families.items()):
             if yes:
                 missing = f", not in: {' '.join(h.stem for h in no)}" if no else ""

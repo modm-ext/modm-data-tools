@@ -480,6 +480,22 @@ class Lookups(unittest.TestCase):
         assert "pattern too slow" in str(_raises(lambda: docs.doc_grep(r"(.*e){12}%%", doc="AN1015")))
         assert time.monotonic() - start < 10
 
+    def test_lookup_bugs(self):
+        """Fixes of the lookup bugs of 2026-11-18: bit lists, code listings, H7P headers"""
+        # one description for a field at several places is one row with all bits
+        out = docs.doc_register("TIM1_SMCR", device="stm32g474re")
+        assert "| 16, 2:0 | SMS[3], SMS[2:0] | rw | Slave mode selection" in out, out
+        assert "described as bits 16," not in out
+        out = docs.doc_register("DMA_LISR", device="stm32f767zi")
+        assert "| 27, 21, 11, 5 | TCIF3, TCIF2, TCIF1, TCIF0 | r |" in out, out
+        assert "| 15:12 | Res. |  | Reserved, must be kept at reset value. |" in out, out
+        # code listings keep their lines
+        out = docs.doc_section("PM0253", "4.8.5")
+        assert "```\nCCSIDR EQU 0xE000ED80\nCSSELR EQU 0xE000ED84\n" in out, out
+        # the families of find_define are those of device_condition, the stm32h7pxx headers are H7
+        out = headers.find_define("FDCAN3(_BASE)?", limit=0)
+        assert "stm32h7: 8 of 28 headers" in out and "stm32h7p" not in out, out
+
     def test_decode_values(self):
         """The forms of values decode_register takes"""
         out = svd.decode_register("stm32g474re", value="0x40021000: 63 0\nWarn : polling\n0x40021008: 1")

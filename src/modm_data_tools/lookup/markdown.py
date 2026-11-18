@@ -199,6 +199,8 @@ def markdown(html: str, table_rows: int = 0) -> str:
                 out.append("\n".join("> " + l for l in inline(child).split("\n")))
             elif child.tag == "table":
                 out.append(table_markdown(child, table_rows))
+            elif child.tag == "pre":
+                out.append(f"```\n{_verbatim(child).strip(chr(10))}\n```")
             elif child.tag in ("p", "caption", "span"):
                 out.append(inline(child))
             else:
@@ -206,6 +208,11 @@ def markdown(html: str, table_rows: int = 0) -> str:
 
     block(Tree(html).root)
     return "\n\n".join(t for t in out + ["\n".join(notes)] if t)
+
+
+def _verbatim(node) -> str:
+    """Text of a code listing as it is"""
+    return "".join(c if isinstance(c, str) else "\n" if c.tag == "br" else _verbatim(c) for c in node.children)
 
 
 def footnotes(ol) -> str:
