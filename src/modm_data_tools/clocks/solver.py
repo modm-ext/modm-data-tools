@@ -454,6 +454,39 @@ class Solver:
             self._relevant_cache[signature] = sorted(names)
         return self._relevant_cache[signature]
 
+    def _around(self, sources: set, config: dict, locked, targets: dict, use, tolerance: float, budget: float) -> dict:
+        """
+        Solves on a copy of the tree whose muxes lose the inputs that only pass on one of `sources`.
+        The muxes left with one input stand at it, so that the configuration means the same on this tree.
+        """
+        nodes, pinned = dict(self.nodes), {}
+        for n, node in self.nodes.items():
+            if node["kind"] == "mux":
+                kept = [i for i in node["inputs"] if not _passes(self.nodes, i["from"], sources)]
+                if kept and len(kept) < len(node["inputs"]):
+                    nodes[n] = {**node, "inputs": kept}
+                    if len(kept) == 1:
+                        pinned[n] = _macro(kept[0])
+        if all(nodes[n] is node for n, node in self.nodes.items()):
+            return {"ok": False}
+
+        def valid(name, value):
+            try:
+                return _setting(name, nodes[name], value) is not None
+            except ValueError:
+                return False
+
+        kept_config = {k: v for k, v in config.items() if k not in nodes or valid(k, v)}
+        r = Solver({**self.tree, "nodes": nodes}).solve(kept_config, locked, targets, use, tolerance, budget)
+        if not r["ok"]:
+            return r
+        trial = {**r["config"], **{n: m for n, m in pinned.items() if choice_of(self.tree, n, r["config"]) != m}}
+        result = evaluate(self.tree, trial, use)
+        # The same frequencies on the whole tree, the inputs it lost are not in use
+        if self.problems(result, [])[0] or any(result[n]["freq"] != r["result"][n]["freq"] for n in targets):
+            return {"ok": False}
+        return {**r, "config": trial, "result": result}
+
     def problems(self, result: dict, constraints: list) -> tuple[list, list]:
         """The violations of a configuration, and the limits of the nodes that break one."""
         out, limits = [], []
@@ -537,6 +570,7 @@ class Solver:
         :return: {ok, config, result, unmet: [{id, why, closest}], problems, timeout, ...}
         """
         config, targets = dict(config or {}), dict(targets or {})
+        start = time.monotonic()
         core = {n for n in self.core if is_variable(self.nodes[n])} - set(locked)
         if core and targets and not any(n in self.core for n in targets):
             # Kernel clock targets leave the core clocks alone where they can, else a PLL1Q target
@@ -578,7 +612,7 @@ class Solver:
             return {"ok": False, "config": config, "best": None, "unmet": unmet, "problems": [],
                     "candidates": 0, "timeout": False, "steps": self.steps}  # fmt: skip
         self.memo, self.deadline = {}, time.monotonic() + budget
-        best, timeout, candidates = None, False, 0
+        best, timeout, candidates, broken = None, False, 0, set()
         # The prescalers below SYSCLK that the search may pick slower than needed, the widest first
         prescalers = (core - set(config)) & self.descendants("SysCLKOutput")
         prescalers = [n for n in prescalers if self.nodes[n]["kind"] == "div"]
@@ -655,6 +689,10 @@ class Solver:
                                 continue
                             if not best or len(out) < len(best["problems"]):
                                 best = {"config": trial, "result": result, "problems": out}
+                            # A clock source breaks its own limits: no repair moves its frequency
+                            broken |= {
+                                lim["id"] for lim in limits if self.nodes[lim["id"]]["kind"] in ("fixed", "varied")
+                            }
                             fresh = [lim for lim in limits if not any(c["id"] == lim["id"] for c in constraints)]
                             if fresh:
                                 for lim in fresh:
@@ -681,6 +719,10 @@ class Solver:
             timeout = True
         if best_ok:
             return faster(best_ok[1])
+        # e.g. an HSE of 32 MHz that only bypass allows on the STM32L1: the search routes around it
+        if broken and not timeout and (left := budget - (time.monotonic() - start)) > 0:
+            if (r := self._around(broken, config, locked, targets, use, tolerance, left))["ok"]:
+                return r
         # No configuration meets everything: find out which targets are the problem
         unmet = self._unreachable(target_list, base, budget) if diagnose else []
         if not unmet and target_list:
@@ -689,6 +731,20 @@ class Solver:
         return {"ok": False, "config": config, "best": best, "unmet": unmet,
                 "problems": best["problems"] if best else [], "candidates": candidates,
                 "timeout": timeout, "steps": self.steps}  # fmt: skip
+
+
+def _passes(nodes: dict, name: str, sources: set) -> bool:
+    """Whether a node only passes on one of `sources`, through dividers, multipliers and outputs."""
+    seen = set()
+    while name in nodes and name not in seen:
+        if name in sources:
+            return True
+        seen.add(name)
+        node = nodes[name]
+        if node["kind"] == "mux" or not node["inputs"]:
+            return False
+        name = node["inputs"][0]["from"]
+    return False
 
 
 def _value(v) -> str:

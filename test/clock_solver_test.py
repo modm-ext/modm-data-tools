@@ -43,6 +43,9 @@ class ClockSolverTest(unittest.TestCase):
         ("STM32L476RGTx", {}, {"SysCLKOutput": 80e6, "USB_OTG_FS": 48e6}, ["USB_OTG_FS"], True, 0),
         ("STM32H743ZITx", {"HSEOSC": "8000000"}, {"SysCLKOutput": 480e6, "SPI1": 49.152e6}, ["SPI1"], True, 1e-5),
         ("STM32U083RCTx", {}, {"SysCLKOutput": 56e6, "TIM1": 56e6, "USART1": 56e6}, ["TIM1", "USART1"], True, 0),
+        # An HSE that only bypass allows breaks its own limit: the solver routes around it, from the HSI
+        ("STM32L151C8TxA", {"HSEOSC": "32000000"}, {"SysCLKOutput": 32e6}, [], True, 0),
+        ("STM32F779IITx", {"HSEOSC": "48000000"}, {"SysCLKOutput": 48e6}, ["USB_OTG_HS"], True, 0),
     ]
 
     def test_solver(self):
