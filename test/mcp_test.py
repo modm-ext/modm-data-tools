@@ -53,6 +53,12 @@ class Registration(unittest.TestCase):
             for name, p in parameters.items():
                 assert schema["properties"][name]["type"] == TYPES[p.annotation], (tool.name, name)
 
+    def test_instructions(self):
+        """Name every tool within the 2048 characters that Claude Code passes on to the model"""
+        text = mcp.server.instructions
+        assert len(text) <= 2048, len(text)
+        assert not [f.__name__ for f in tools.TOOLS if f.__name__ not in text]
+
     def test_errors(self):
         """Errors of the input reach the client and the CLI as their message, bugs as such"""
         assert tools.message(UserError("no device")) == "no device"
